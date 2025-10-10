@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gitts Trivia Game</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎮 Gitts Trivia Game</h1>
+            <p class="subtitle">¡Pon a prueba tus conocimientos!</p>
+        </header>
+
+        <div id="start-screen" class="screen">
+            <div class="welcome-box">
+                <h2>Bienvenido al Juego de Trivia</h2>
+                <p>Responde las preguntas correctamente y obtén la puntuación más alta.</p>
+                <button id="start-btn" class="btn btn-primary">Comenzar Juego</button>
+            </div>
+        </div>
+
+        <div id="game-screen" class="screen hidden">
+            <div class="game-info">
+                <div class="info-item">
+                    <span class="label">Pregunta:</span>
+                    <span id="question-number" class="value">1/10</span>
+                </div>
+                <div class="info-item">
+                    <span class="label">Puntuación:</span>
+                    <span id="score" class="value">0</span>
+                </div>
+            </div>
+
+            <div class="question-container">
+                <h2 id="question" class="question">Pregunta aparecerá aquí</h2>
+                <div id="answers" class="answers">
+                    <!-- Respuestas se generarán dinámicamente -->
+                </div>
+            </div>
+
+            <div class="game-controls">
+                <button id="next-btn" class="btn btn-secondary hidden">Siguiente Pregunta</button>
+            </div>
+        </div>
+
+        <div id="result-screen" class="screen hidden">
+            <div class="result-box">
+                <h2>¡Juego Terminado!</h2>
+                <div class="final-score">
+                    <p>Tu puntuación final:</p>
+                    <h3 id="final-score">0/10</h3>
+                    <p id="performance-message" class="performance-msg"></p>
+                </div>
+                <button id="restart-btn" class="btn btn-primary">Jugar de Nuevo</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
