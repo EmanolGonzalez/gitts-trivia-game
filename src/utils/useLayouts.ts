@@ -3,8 +3,8 @@ import { useRoute } from 'vue-router'
 import type { LayoutType } from '@/types/layout'
 
 // Importar layouts
-import DefaultLayout from '@/layouts/dashboard/dashboard-layout.vue'
-import BlankLayout from '@/layouts/BlankLayout.vue'
+import DefaultLayout from '@/layouts/default-layout.vue'
+import BlankLayout from '@/layouts/blank-layout.vue'
 
 const layouts = {
   default: DefaultLayout,
