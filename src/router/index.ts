@@ -33,6 +33,19 @@ const router = createRouter({
       component: () => import('../views/Results.vue'),
       meta: { layout: 'blank' },
     },
+    // 🎮 Rutas del Sistema de Trivia
+    {
+      path: '/control',
+      name: 'Control',
+      component: () => import('../views/Control.vue'),
+      meta: { layout: 'blank' },
+    },
+    {
+      path: '/display',
+      name: 'Display',
+      component: () => import('../views/Display.vue'),
+      meta: { layout: 'blank' },
+    },
   ],
 })
 
