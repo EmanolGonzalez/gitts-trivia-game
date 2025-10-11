@@ -203,6 +203,9 @@ const hasAnyTeamBuzzed = computed(() => gameStore.hasAnyTeamBuzzed)
 const showIncorrectFeedback = computed(() => gameStore.showIncorrectFeedback)
 const incorrectTeamName = computed(() => gameStore.incorrectTeamName)
 const incorrectTeamColor = computed(() => gameStore.incorrectTeamColor)
+// 👇 NUEVO: Timer general
+const buzzerTimeRemaining = computed(() => gameStore.buzzerTimeRemaining)
+const isBuzzerTimerActive = computed(() => gameStore.isBuzzerTimerActive)
 
 // Inicializar
 onMounted(async () => {

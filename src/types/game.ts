@@ -7,7 +7,8 @@ export interface Question {
   question: string
   correctAnswer: string
   points: number
-  timeLimit: number // 👈 NUEVO: Tiempo en segundos para responder
+  timeLimit: number // Tiempo en segundos para responder (individual)
+  buzzerTimeLimit: number // 👈 NUEVO: Tiempo para tocar el buzzer (general)
 }
 
 export interface Category {

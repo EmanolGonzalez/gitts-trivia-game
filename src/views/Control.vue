@@ -6,7 +6,7 @@
         <div class="flex items-center justify-between">
           <div>
             <h1 class="text-3xl font-black text-white mb-2">🎮 {{ gameName }}</h1>
-            <p class="text-white/70">Panel de Control</p>
+            <p class="text-white/70">Panel de Control del Profesor</p>
           </div>
           <div class="text-right">
             <p class="text-white/70 text-sm">Pregunta</p>
@@ -329,6 +329,9 @@ const activeTeamColor = computed(() => gameStore.activeTeamColor)
 const timeRemaining = computed(() => gameStore.timeRemaining)
 const disabledTeamsForQuestion = computed(() => gameStore.disabledTeamsForQuestion)
 const hasActiveTeam = computed(() => gameStore.hasActiveTeam)
+// 👇 NUEVO: Timer general
+const buzzerTimeRemaining = computed(() => gameStore.buzzerTimeRemaining)
+const isBuzzerTimerActive = computed(() => gameStore.isBuzzerTimerActive)
 
 // Inicializar
 onMounted(async () => {

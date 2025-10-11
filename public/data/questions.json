@@ -7,7 +7,8 @@
       "question": "¿En qué año Panamá se independizó de Colombia?",
       "correctAnswer": "1903",
       "points": 100,
-      "timeLimit": 30
+      "timeLimit": 30,
+      "buzzerTimeLimit": 15
     },
     {
       "id": "q2",
@@ -16,7 +17,8 @@
       "question": "¿Cuál es la capital de Francia?",
       "correctAnswer": "París",
       "points": 50,
-      "timeLimit": 20
+      "timeLimit": 20,
+      "buzzerTimeLimit": 10
     },
     {
       "id": "q3",
@@ -25,7 +27,8 @@
       "question": "¿Cuál es el símbolo químico del oro?",
       "correctAnswer": "Au",
       "points": 75,
-      "timeLimit": 25
+      "timeLimit": 25,
+      "buzzerTimeLimit": 12
     },
     {
       "id": "q4",
@@ -34,7 +37,8 @@
       "question": "¿Cuánto es 15 × 12?",
       "correctAnswer": "180",
       "points": 50,
-      "timeLimit": 30
+      "timeLimit": 30,
+      "buzzerTimeLimit": 15
     },
     {
       "id": "q5",
@@ -43,7 +47,8 @@
       "question": "¿Quién escribió 'Cien años de soledad'?",
       "correctAnswer": "Gabriel García Márquez",
       "points": 75,
-      "timeLimit": 25
+      "timeLimit": 25,
+      "buzzerTimeLimit": 12
     },
     {
       "id": "q6",
@@ -52,7 +57,8 @@
       "question": "¿Quién fue el primer presidente de los Estados Unidos?",
       "correctAnswer": "George Washington",
       "points": 50,
-      "timeLimit": 20
+      "timeLimit": 20,
+      "buzzerTimeLimit": 10
     },
     {
       "id": "q7",
@@ -61,7 +67,8 @@
       "question": "¿Cuántos planetas tiene el sistema solar?",
       "correctAnswer": "8 planetas",
       "points": 150,
-      "timeLimit": 35
+      "timeLimit": 35,
+      "buzzerTimeLimit": 15
     },
     {
       "id": "q8",
@@ -70,7 +77,8 @@
       "question": "¿Cuál es el río más largo del mundo?",
       "correctAnswer": "Río Amazonas",
       "points": 100,
-      "timeLimit": 30
+      "timeLimit": 30,
+      "buzzerTimeLimit": 15
     }
   ],
   "categories": [

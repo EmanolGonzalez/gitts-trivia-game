@@ -19,7 +19,7 @@ export const useGameStore = defineStore('game', () => {
   const previousGameStatus = ref<GameStatus | null>(null)
   const showCorrectAnswer = ref(false)
   const gameChannel = ref<BroadcastChannel | null>(null)
-  const gameName = ref('Electric Quiz')
+  const gameName = ref('Torneo Inter-Grupal')
 
   // 🔥 NUEVO: Estado del sistema de buzzer
   const activeRespondingTeam = ref<string | null>(null) // ID del equipo respondiendo
@@ -159,10 +159,27 @@ export const useGameStore = defineStore('game', () => {
         showIncorrectFeedback.value = true
         incorrectTeamName.value = message.teamName
         incorrectTeamColor.value = message.teamColor
-        // Auto-ocultar después de 2 segundos
+        // Auto-ocultar después de 2 segundos y reactivar buzzer timer
         setTimeout(() => {
           showIncorrectFeedback.value = false
+          // 👉 NUEVO: Reiniciar timer general si quedan equipos disponibles
+          startBuzzerTimer()
         }, 2000)
+        break
+      // 👇 NUEVO: Handlers para timer general de buzzer
+      case 'START_BUZZER_TIMER':
+        buzzerTimeRemaining.value = message.timeLimit
+        isBuzzerTimerActive.value = true
+        startBuzzerTimerCountdown()
+        break
+      case 'UPDATE_BUZZER_TIMER':
+        buzzerTimeRemaining.value = message.timeRemaining
+        break
+      case 'BUZZER_TIME_EXPIRED':
+        handleBuzzerTimeExpired()
+        break
+      case 'STOP_BUZZER_TIMER':
+        stopBuzzerTimer()
         break
     }
   }
@@ -185,12 +202,16 @@ export const useGameStore = defineStore('game', () => {
       const question = currentQuestion.value
       if (question) {
         resetQuestionState() // 👈 Limpiar estado de pregunta anterior
-        showCorrectAnswer.value = false // 👈 NUEVO: Asegurar que la respuesta esté oculta
+        showCorrectAnswer.value = false // 👈 Asegurar que la respuesta esté oculta
         sendMessage({
           type: 'NEXT_QUESTION',
           questionId: question.id,
           questionIndex: currentQuestionIndex.value,
         })
+        // 👉 NUEVO: Iniciar timer general para tocar buzzer
+        setTimeout(() => {
+          startBuzzerTimer()
+        }, 500) // Pequeño delay para que se vea la pregunta primero
       }
     }
   }
@@ -233,10 +254,10 @@ export const useGameStore = defineStore('game', () => {
     if (team) {
       team.wrongAnswers++
       
-      // 🔥 NUEVO: Deshabilitar equipo después de fallar
+      // 🔥 Deshabilitar equipo después de fallar
       disabledTeamsForQuestion.value.add(teamId)
       
-      // 👉 NUEVO: Mostrar feedback de incorrecto
+      // 👉 Mostrar feedback de incorrecto
       const teamName = team.name
       const teamColor = team.color
       sendMessage({ 
@@ -245,7 +266,7 @@ export const useGameStore = defineStore('game', () => {
         teamColor 
       })
       
-      // Detener timer y limpiar equipo activo (permitir que otro equipo toque)
+      // Detener timer individual y limpiar equipo activo
       stopTimer()
       activeRespondingTeam.value = null
       activeTeamName.value = ''
@@ -253,6 +274,9 @@ export const useGameStore = defineStore('game', () => {
       
       sendMessage({ type: 'UPDATE_TEAMS', teams: toRaw(teams.value) })
       sendMessage({ type: 'STOP_TIMER' })
+      
+      // 👉 NUEVO: Después de mostrar feedback, reiniciar timer general si quedan equipos
+      // (El timeout está en el handler de SHOW_INCORRECT_FEEDBACK)
     }
   }
 
@@ -282,6 +306,9 @@ export const useGameStore = defineStore('game', () => {
       return
     }
 
+    // 👉 NUEVO: Detener timer general de buzzer
+    stopBuzzerTimer()
+
     // Establecer equipo activo
     activeRespondingTeam.value = teamId
     activeTeamName.value = team.name
@@ -295,7 +322,7 @@ export const useGameStore = defineStore('game', () => {
       teamColor: team.color,
     })
 
-    // Iniciar timer
+    // Iniciar timer individual de respuesta
     const timeLimit = currentQuestion.value.timeLimit || 30
     timeRemaining.value = timeLimit
     
@@ -339,7 +366,7 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
-  // 🔥 NUEVO: Manejar cuando expira el tiempo
+  // 🔥 NUEVO: Manejar cuando expira el tiempo individual
   function handleTimeExpired() {
     if (activeRespondingTeam.value) {
       // Deshabilitar equipo que se quedó sin tiempo
@@ -352,18 +379,93 @@ export const useGameStore = defineStore('game', () => {
       timeRemaining.value = 0
     }
     stopTimer()
+    
+    // 👉 NUEVO: Reiniciar timer general si quedan equipos disponibles
+    setTimeout(() => {
+      startBuzzerTimer()
+    }, 2000) // Esperar 2 segundos después de "Tiempo Agotado"
+  }
+
+  // 👇 NUEVO: Funciones para timer general de buzzer
+  function startBuzzerTimer() {
+    // No iniciar si no hay pregunta actual o si ya está en modo respuesta
+    if (!currentQuestion.value || gameStatus.value !== 'question') {
+      return
+    }
+    
+    // No iniciar si todos los equipos están deshabilitados
+    const availableTeamsCount = teams.value.filter(
+      t => !disabledTeamsForQuestion.value.has(t.id)
+    ).length
+    
+    if (availableTeamsCount === 0) {
+      // Nadie más puede responder
+      return
+    }
+    
+    const buzzerTimeLimit = currentQuestion.value.buzzerTimeLimit || 15
+    buzzerTimeRemaining.value = buzzerTimeLimit
+    isBuzzerTimerActive.value = true
+    
+    sendMessage({
+      type: 'START_BUZZER_TIMER',
+      timeLimit: buzzerTimeLimit,
+    })
+    
+    startBuzzerTimerCountdown()
+  }
+
+  function startBuzzerTimerCountdown() {
+    // Limpiar cualquier timer existente
+    if (buzzerTimerInterval.value) {
+      clearInterval(buzzerTimerInterval.value)
+    }
+
+    buzzerTimerInterval.value = window.setInterval(() => {
+      if (buzzerTimeRemaining.value > 0) {
+        buzzerTimeRemaining.value--
+        sendMessage({
+          type: 'UPDATE_BUZZER_TIMER',
+          timeRemaining: buzzerTimeRemaining.value,
+        })
+      } else {
+        // Tiempo general expirado
+        stopBuzzerTimer()
+        sendMessage({ type: 'BUZZER_TIME_EXPIRED' })
+        handleBuzzerTimeExpired()
+      }
+    }, 1000)
+  }
+
+  function stopBuzzerTimer() {
+    if (buzzerTimerInterval.value) {
+      clearInterval(buzzerTimerInterval.value)
+      buzzerTimerInterval.value = null
+    }
+    isBuzzerTimerActive.value = false
+  }
+
+  function handleBuzzerTimeExpired() {
+    // Cuando expira el timer general y nadie tocó
+    // Por ahora solo detener, el profesor puede decidir qué hacer
+    stopBuzzerTimer()
+    buzzerTimeRemaining.value = 0
+    isBuzzerTimerActive.value = false
   }
 
   // 🔥 NUEVO: Resetear estado de pregunta (para nueva pregunta)
   function resetQuestionState() {
     stopTimer()
+    stopBuzzerTimer() // 👈 NUEVO: También detener timer general
     activeRespondingTeam.value = null
     activeTeamName.value = ''
     activeTeamColor.value = ''
     timeRemaining.value = 0
+    buzzerTimeRemaining.value = 0 // 👈 NUEVO
+    isBuzzerTimerActive.value = false // 👈 NUEVO
     disabledTeamsForQuestion.value.clear() // Limpiar equipos deshabilitados
-    hasAnyTeamBuzzed.value = false // 👈 NUEVO: Resetear flag
-    showIncorrectFeedback.value = false // 👈 NUEVO: Limpiar feedback
+    hasAnyTeamBuzzed.value = false // Resetear flag
+    showIncorrectFeedback.value = false // Limpiar feedback
     incorrectTeamName.value = ''
     incorrectTeamColor.value = ''
     sendMessage({ type: 'RESET_QUESTION_STATE' })
@@ -409,10 +511,13 @@ export const useGameStore = defineStore('game', () => {
     activeTeamColor,
     timeRemaining,
     disabledTeamsForQuestion,
-    hasAnyTeamBuzzed, // 👈 NUEVO
-    showIncorrectFeedback, // 👈 NUEVO
-    incorrectTeamName, // 👈 NUEVO
-    incorrectTeamColor, // 👈 NUEVO
+    hasAnyTeamBuzzed,
+    showIncorrectFeedback,
+    incorrectTeamName,
+    incorrectTeamColor,
+    // 👇 NUEVO: Estado timer general
+    buzzerTimeRemaining,
+    isBuzzerTimerActive,
     // Computadas
     currentQuestion,
     sortedTeams,
@@ -439,5 +544,7 @@ export const useGameStore = defineStore('game', () => {
     teamBuzzed,
     stopTimer,
     resetQuestionState,
+    startBuzzerTimer, // 👈 NUEVO
+    stopBuzzerTimer, // 👈 NUEVO
   }
 })
