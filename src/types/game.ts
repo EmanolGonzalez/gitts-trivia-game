@@ -61,6 +61,7 @@ export type GameMessage =
   | { type: 'TIME_EXPIRED' } // Se acabó el tiempo
   | { type: 'STOP_TIMER' } // Detiene timer
   | { type: 'RESET_QUESTION_STATE' } // Resetea estado de pregunta actual
+  | { type: 'SHOW_INCORRECT_FEEDBACK'; teamName: string; teamColor: string } // Muestra feedback de incorrecto
 
 export interface QuestionsData {
   questions: Question[]

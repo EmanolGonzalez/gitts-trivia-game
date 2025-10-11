@@ -72,13 +72,40 @@
             </div>
           </transition>
 
-          <!-- 🔥 NUEVO: Mensaje cuando se acaba el tiempo -->
+          <!-- 🔥 NUEVO: Mensaje esperando buzzer (cuando NO ha tocado nadie) -->
           <transition name="fade">
             <div
-              v-if="timeRemaining === 0 && !hasActiveTeam && gameStatus === 'question'"
+              v-if="!hasActiveTeam && !hasAnyTeamBuzzed && gameStatus === 'question'"
+              class="mt-8 p-6 bg-blue-500/20 border-2 border-blue-500/50 rounded-2xl"
+            >
+              <p class="text-3xl font-bold text-blue-400 text-center animate-pulse">
+                🔔 Esperando que un equipo presione el buzzer...
+              </p>
+            </div>
+          </transition>
+
+          <!-- 🔥 NUEVO: Mensaje cuando se acaba el tiempo (solo si alguien ya tocó) -->
+          <transition name="fade">
+            <div
+              v-if="hasAnyTeamBuzzed && timeRemaining === 0 && !hasActiveTeam && gameStatus === 'question'"
               class="mt-8 p-6 bg-red-500/20 border-2 border-red-500 rounded-2xl"
             >
-              <p class="text-3xl font-bold text-red-400">⏰ ¡Tiempo Agotado!</p>
+              <p class="text-3xl font-bold text-red-400 text-center">⏰ ¡Tiempo Agotado!</p>
+            </div>
+          </transition>
+
+          <!-- 🔥 NUEVO: Feedback de respuesta incorrecta -->
+          <transition name="scale">
+            <div
+              v-if="showIncorrectFeedback"
+              class="mt-8 p-8 bg-red-500/30 border-4 border-red-500 rounded-2xl animate-pulse"
+            >
+              <div class="text-center">
+                <p class="text-6xl font-black text-red-400 mb-4">❌ ¡INCORRECTO!</p>
+                <p class="text-3xl text-white" :style="{ color: incorrectTeamColor }">
+                  {{ incorrectTeamName }}
+                </p>
+              </div>
             </div>
           </transition>
         </div>
@@ -172,6 +199,10 @@ const activeTeamName = computed(() => gameStore.activeTeamName)
 const activeTeamColor = computed(() => gameStore.activeTeamColor)
 const timeRemaining = computed(() => gameStore.timeRemaining)
 const hasActiveTeam = computed(() => gameStore.hasActiveTeam)
+const hasAnyTeamBuzzed = computed(() => gameStore.hasAnyTeamBuzzed)
+const showIncorrectFeedback = computed(() => gameStore.showIncorrectFeedback)
+const incorrectTeamName = computed(() => gameStore.incorrectTeamName)
+const incorrectTeamColor = computed(() => gameStore.incorrectTeamColor)
 
 // Inicializar
 onMounted(async () => {

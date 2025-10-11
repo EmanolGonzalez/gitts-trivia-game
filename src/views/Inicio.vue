@@ -15,7 +15,7 @@ const kpis = [
   <div class="px-4 md:px-6 lg:px-8 py-6 space-y-6">
     <EventBanner
       target="2025-10-15T13:00:00"
-      title="Torneo Inter-Grupal"
+      title="Electric Quiz 2025"
       image-src="/image-reference.webp"
       details-label="Ver detalles"
       locale="es-PA"

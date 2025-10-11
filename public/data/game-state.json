@@ -1,7 +1,7 @@
 {
   "currentGame": {
     "id": "game_001",
-    "name": "Torneo Inter-Grupal",
+    "name": "Electric Quiz",
     "status": "waiting",
     "currentQuestionIndex": -1,
     "currentQuestionId": null,

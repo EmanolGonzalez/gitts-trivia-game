@@ -19,7 +19,7 @@ export const useGameStore = defineStore('game', () => {
   const previousGameStatus = ref<GameStatus | null>(null)
   const showCorrectAnswer = ref(false)
   const gameChannel = ref<BroadcastChannel | null>(null)
-  const gameName = ref('Torneo Inter-Grupal')
+  const gameName = ref('Electric Quiz')
 
   // 🔥 NUEVO: Estado del sistema de buzzer
   const activeRespondingTeam = ref<string | null>(null) // ID del equipo respondiendo
@@ -28,6 +28,10 @@ export const useGameStore = defineStore('game', () => {
   const timeRemaining = ref<number>(0) // Segundos restantes
   const timerInterval = ref<number | null>(null) // Referencia del interval
   const disabledTeamsForQuestion = ref<Set<string>>(new Set()) // Equipos que ya no pueden responder
+  const hasAnyTeamBuzzed = ref<boolean>(false) // 👈 NUEVO: Para saber si alguien ya tocó en esta pregunta
+  const showIncorrectFeedback = ref<boolean>(false) // 👈 NUEVO: Para mostrar feedback de incorrecto
+  const incorrectTeamName = ref<string>('') // 👈 NUEVO: Nombre del equipo que falló
+  const incorrectTeamColor = ref<string>('') // 👈 NUEVO: Color del equipo que falló
 
   // Computadas existentes
   const currentQuestion = computed(() => {
@@ -132,6 +136,8 @@ export const useGameStore = defineStore('game', () => {
         activeRespondingTeam.value = message.teamId
         activeTeamName.value = message.teamName
         activeTeamColor.value = message.teamColor
+        hasAnyTeamBuzzed.value = true // 👈 NUEVO
+        showIncorrectFeedback.value = false // 👈 NUEVO: Limpiar feedback anterior
         break
       case 'START_TIMER':
         timeRemaining.value = message.timeLimit
@@ -148,6 +154,15 @@ export const useGameStore = defineStore('game', () => {
         break
       case 'RESET_QUESTION_STATE':
         resetQuestionState()
+        break
+      case 'SHOW_INCORRECT_FEEDBACK': // 👈 NUEVO
+        showIncorrectFeedback.value = true
+        incorrectTeamName.value = message.teamName
+        incorrectTeamColor.value = message.teamColor
+        // Auto-ocultar después de 2 segundos
+        setTimeout(() => {
+          showIncorrectFeedback.value = false
+        }, 2000)
         break
     }
   }
@@ -170,6 +185,7 @@ export const useGameStore = defineStore('game', () => {
       const question = currentQuestion.value
       if (question) {
         resetQuestionState() // 👈 Limpiar estado de pregunta anterior
+        showCorrectAnswer.value = false // 👈 NUEVO: Asegurar que la respuesta esté oculta
         sendMessage({
           type: 'NEXT_QUESTION',
           questionId: question.id,
@@ -206,6 +222,9 @@ export const useGameStore = defineStore('game', () => {
       
       sendMessage({ type: 'UPDATE_TEAMS', teams: toRaw(teams.value) })
       sendMessage({ type: 'STOP_TIMER' })
+      
+      // 👉 NUEVO: Mostrar respuesta automáticamente cuando es correcto
+      showAnswer()
     }
   }
 
@@ -216,6 +235,15 @@ export const useGameStore = defineStore('game', () => {
       
       // 🔥 NUEVO: Deshabilitar equipo después de fallar
       disabledTeamsForQuestion.value.add(teamId)
+      
+      // 👉 NUEVO: Mostrar feedback de incorrecto
+      const teamName = team.name
+      const teamColor = team.color
+      sendMessage({ 
+        type: 'SHOW_INCORRECT_FEEDBACK', 
+        teamName, 
+        teamColor 
+      })
       
       // Detener timer y limpiar equipo activo (permitir que otro equipo toque)
       stopTimer()
@@ -334,6 +362,10 @@ export const useGameStore = defineStore('game', () => {
     activeTeamColor.value = ''
     timeRemaining.value = 0
     disabledTeamsForQuestion.value.clear() // Limpiar equipos deshabilitados
+    hasAnyTeamBuzzed.value = false // 👈 NUEVO: Resetear flag
+    showIncorrectFeedback.value = false // 👈 NUEVO: Limpiar feedback
+    incorrectTeamName.value = ''
+    incorrectTeamColor.value = ''
     sendMessage({ type: 'RESET_QUESTION_STATE' })
   }
 
@@ -377,6 +409,10 @@ export const useGameStore = defineStore('game', () => {
     activeTeamColor,
     timeRemaining,
     disabledTeamsForQuestion,
+    hasAnyTeamBuzzed, // 👈 NUEVO
+    showIncorrectFeedback, // 👈 NUEVO
+    incorrectTeamName, // 👈 NUEVO
+    incorrectTeamColor, // 👈 NUEVO
     // Computadas
     currentQuestion,
     sortedTeams,
