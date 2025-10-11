@@ -37,9 +37,9 @@
             {{ currentQuestion?.question }}
           </h2>
 
-          <!-- 🔥 NUEVO: Equipo Respondiendo + Timer -->
+          <!-- 🔥 Timer solo visible cuando hay equipo activo Y no se ha calificado -->
           <transition name="scale">
-            <div v-if="hasActiveTeam" class="mt-8">
+            <div v-if="hasActiveTeam && gameStatus === 'question' && !showIncorrectFeedback" class="mt-8">
               <div
                 class="p-8 rounded-2xl border-4 animate-pulse"
                 :style="{
@@ -72,10 +72,10 @@
             </div>
           </transition>
 
-          <!-- 🔥 NUEVO: Mensaje esperando buzzer (cuando NO ha tocado nadie) -->
+          <!-- Mensaje esperando buzzer (cuando NO ha tocado nadie) -->
           <transition name="fade">
             <div
-              v-if="!hasActiveTeam && !hasAnyTeamBuzzed && gameStatus === 'question'"
+              v-if="!hasActiveTeam && !hasAnyTeamBuzzed && gameStatus === 'question' && !showIncorrectFeedback"
               class="mt-8 p-6 bg-blue-500/20 border-2 border-blue-500/50 rounded-2xl"
             >
               <p class="text-3xl font-bold text-blue-400 text-center animate-pulse">
@@ -84,20 +84,20 @@
             </div>
           </transition>
 
-          <!-- 🔥 NUEVO: Mensaje cuando se acaba el tiempo (solo si alguien ya tocó) -->
+          <!-- Mensaje cuando se acaba el tiempo (solo si alguien ya tocó) -->
           <transition name="fade">
             <div
-              v-if="hasAnyTeamBuzzed && timeRemaining === 0 && !hasActiveTeam && gameStatus === 'question'"
+              v-if="hasAnyTeamBuzzed && timeRemaining === 0 && !hasActiveTeam && gameStatus === 'question' && !showIncorrectFeedback"
               class="mt-8 p-6 bg-red-500/20 border-2 border-red-500 rounded-2xl"
             >
               <p class="text-3xl font-bold text-red-400 text-center">⏰ ¡Tiempo Agotado!</p>
             </div>
           </transition>
 
-          <!-- 🔥 NUEVO: Feedback de respuesta incorrecta -->
+          <!-- 🔥 Feedback de respuesta incorrecta (REEMPLAZA al timer) -->
           <transition name="scale">
             <div
-              v-if="showIncorrectFeedback"
+              v-if="showIncorrectFeedback && gameStatus === 'question'"
               class="mt-8 p-8 bg-red-500/30 border-4 border-red-500 rounded-2xl animate-pulse"
             >
               <div class="text-center">
