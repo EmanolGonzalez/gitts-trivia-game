@@ -9,7 +9,17 @@
             <p class="text-white/70 mt-1">{{ gameName }}</p>
           </div>
           <div class="flex items-center gap-3">
+            <!-- 👇 NUEVO: Botón condicional - Muestra "Cerrar Tabla" si está en modo leaderboard -->
             <button
+              v-if="gameStatus === 'leaderboard'"
+              @click="handleCloseLeaderboard"
+              class="px-6 py-3 rounded-xl bg-blue-500 hover:bg-blue-600 text-white font-semibold transition"
+            >
+              ✕ Cerrar Tabla
+            </button>
+            <!-- Botón normal para mostrar tabla -->
+            <button
+              v-else
               @click="handleShowLeaderboard"
               class="px-6 py-3 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-white font-semibold transition"
             >
@@ -221,6 +231,7 @@ const totalQuestions = computed(() => gameStore.totalQuestions)
 const hasNextQuestion = computed(() => gameStore.hasNextQuestion)
 const showCorrectAnswer = computed(() => gameStore.showCorrectAnswer)
 const gameName = computed(() => gameStore.gameName)
+const gameStatus = computed(() => gameStore.gameStatus) // 👈 NUEVO: Necesitamos el estado del juego
 
 // Inicializar
 onMounted(async () => {
@@ -252,6 +263,11 @@ function handleMarkWrong(teamId: string) {
 
 function handleShowLeaderboard() {
   gameStore.showLeaderboard()
+}
+
+// 👇 NUEVA FUNCIÓN
+function handleCloseLeaderboard() {
+  gameStore.closeLeaderboard()
 }
 
 function handleResetGame() {

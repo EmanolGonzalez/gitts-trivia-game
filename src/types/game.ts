@@ -49,7 +49,8 @@ export type GameMessage =
   | { type: 'SHOW_ANSWER'; answer: string }
   | { type: 'MARK_CORRECT'; teamId: string; points: number }
   | { type: 'MARK_WRONG'; teamId: string }
-  | { type: 'SHOW_LEADERBOARD' }
+  | { type: 'SHOW_LEADERBOARD'; teams: Team[] } // 👈 MODIFICADO: Incluye teams
+  | { type: 'CLOSE_LEADERBOARD' } // 👈 NUEVO MENSAJE
   | { type: 'RESET_GAME' }
   | { type: 'UPDATE_TEAMS'; teams: Team[] }
 

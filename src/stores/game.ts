@@ -16,6 +16,7 @@ export const useGameStore = defineStore('game', () => {
   const teams = ref<Team[]>([])
   const currentQuestionIndex = ref(-1)
   const gameStatus = ref<GameStatus>('waiting')
+  const previousGameStatus = ref<GameStatus | null>(null) // 👈 NUEVO: Guardar estado previo
   const showCorrectAnswer = ref(false)
   const gameChannel = ref<BroadcastChannel | null>(null)
   const gameName = ref('Torneo Inter-Grupal')
@@ -94,7 +95,18 @@ export const useGameStore = defineStore('game', () => {
         markWrong(message.teamId)
         break
       case 'SHOW_LEADERBOARD':
+        // 🔥 FIX: Actualizar teams antes de mostrar leaderboard
+        teams.value = message.teams
+        // Guardar estado actual antes de mostrar leaderboard
+        previousGameStatus.value = gameStatus.value
         gameStatus.value = 'leaderboard'
+        break
+      case 'CLOSE_LEADERBOARD': // 👈 NUEVO
+        // Restaurar el estado previo
+        if (previousGameStatus.value) {
+          gameStatus.value = previousGameStatus.value
+          previousGameStatus.value = null
+        }
         break
       case 'UPDATE_TEAMS':
         teams.value = message.teams
@@ -159,14 +171,28 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function showLeaderboard() {
+    // 👈 MODIFICADO: Guardar estado actual antes de cambiar
+    previousGameStatus.value = gameStatus.value
     gameStatus.value = 'leaderboard'
-    sendMessage({ type: 'SHOW_LEADERBOARD' })
+    // 🔥 FIX: Enviar teams actualizados junto con el mensaje
+    sendMessage({ type: 'SHOW_LEADERBOARD', teams: teams.value })
+  }
+
+  // 👇 NUEVA FUNCIÓN
+  function closeLeaderboard() {
+    // Restaurar el estado previo (question o show_answer)
+    if (previousGameStatus.value) {
+      gameStatus.value = previousGameStatus.value
+      previousGameStatus.value = null
+      sendMessage({ type: 'CLOSE_LEADERBOARD' })
+    }
   }
 
   function resetGame() {
     currentQuestionIndex.value = -1
     gameStatus.value = 'waiting'
     showCorrectAnswer.value = false
+    previousGameStatus.value = null // 👈 NUEVO: Limpiar estado previo
     teams.value.forEach((team) => {
       team.score = 0
       team.correctAnswers = 0
@@ -176,8 +202,6 @@ export const useGameStore = defineStore('game', () => {
   }
 
   async function saveGameState() {
-    // En un futuro, aquí guardarías en el archivo JSON
-    // Por ahora solo en memoria
     console.log('Estado del juego guardado', {
       teams: teams.value,
       currentQuestionIndex: currentQuestionIndex.value,
@@ -208,6 +232,7 @@ export const useGameStore = defineStore('game', () => {
     markCorrect,
     markWrong,
     showLeaderboard,
+    closeLeaderboard, // 👈 NUEVA ACCIÓN EXPORTADA
     resetGame,
     saveGameState,
     sendMessage,
