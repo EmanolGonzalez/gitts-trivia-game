@@ -1,0 +1,52 @@
+{
+  "currentGame": {
+    "id": "game_001",
+    "name": "Torneo Inter-Grupal",
+    "status": "waiting",
+    "currentQuestionIndex": -1,
+    "currentQuestionId": null,
+    "startedAt": null,
+    "showCorrectAnswer": false
+  },
+  "teams": [
+    {
+      "id": "team1",
+      "name": "Equipo Alpha",
+      "color": "#3b82f6",
+      "score": 0,
+      "correctAnswers": 0,
+      "wrongAnswers": 0
+    },
+    {
+      "id": "team2",
+      "name": "Equipo Beta",
+      "color": "#10b981",
+      "score": 0,
+      "correctAnswers": 0,
+      "wrongAnswers": 0
+    },
+    {
+      "id": "team3",
+      "name": "Equipo Gamma",
+      "color": "#f59e0b",
+      "score": 0,
+      "correctAnswers": 0,
+      "wrongAnswers": 0
+    },
+    {
+      "id": "team4",
+      "name": "Equipo Delta",
+      "color": "#ec4899",
+      "score": 0,
+      "correctAnswers": 0,
+      "wrongAnswers": 0
+    }
+  ],
+  "gameStates": [
+    "waiting",
+    "question",
+    "show_answer",
+    "leaderboard",
+    "finished"
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "questions": [
+    {
+      "id": "q1",
+      "category": "Historia",
+      "difficulty": "medium",
+      "question": "¿En qué año Panamá se independizó de Colombia?",
+      "correctAnswer": "1903",
+      "points": 100
+    },
+    {
+      "id": "q2",
+      "category": "Geografía",
+      "difficulty": "easy",
+      "question": "¿Cuál es la capital de Francia?",
+      "correctAnswer": "París",
+      "points": 50
+    },
+    {
+      "id": "q3",
+      "category": "Ciencias",
+      "difficulty": "hard",
+      "question": "¿Cuál es el símbolo químico del oro?",
+      "correctAnswer": "Au",
+      "points": 150
+    },
+    {
+      "id": "q4",
+      "category": "Matemáticas",
+      "difficulty": "medium",
+      "question": "¿Cuánto es 15 × 12?",
+      "correctAnswer": "180",
+      "points": 75
+    },
+    {
+      "id": "q5",
+      "category": "Literatura",
+      "difficulty": "medium",
+      "question": "¿Quién escribió 'Cien años de soledad'?",
+      "correctAnswer": "Gabriel García Márquez",
+      "points": 100
+    },
+    {
+      "id": "q6",
+      "category": "Historia",
+      "difficulty": "easy",
+      "question": "¿Quién fue el primer presidente de los Estados Unidos?",
+      "correctAnswer": "George Washington",
+      "points": 50
+    },
+    {
+      "id": "q7",
+      "category": "Ciencias",
+      "difficulty": "medium",
+      "question": "¿Cuántos planetas tiene el sistema solar?",
+      "correctAnswer": "8",
+      "points": 75
+    },
+    {
+      "id": "q8",
+      "category": "Geografía",
+      "difficulty": "hard",
+      "question": "¿Cuál es el río más largo del mundo?",
+      "correctAnswer": "Río Amazonas",
+      "points": 150
+    }
+  ],
+  "categories": [
+    { "id": "historia", "name": "Historia", "color": "#f59e0b" },
+    { "id": "geografia", "name": "Geografía", "color": "#10b981" },
+    { "id": "ciencias", "name": "Ciencias", "color": "#3b82f6" },
+    { "id": "matematicas", "name": "Matemáticas", "color": "#8b5cf6" },
+    { "id": "literatura", "name": "Literatura", "color": "#ec4899" }
+  ]
+}
