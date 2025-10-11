@@ -6,7 +6,8 @@
       "difficulty": "medium",
       "question": "¿En qué año Panamá se independizó de Colombia?",
       "correctAnswer": "1903",
-      "points": 100
+      "points": 100,
+      "timeLimit": 30
     },
     {
       "id": "q2",
@@ -14,23 +15,26 @@
       "difficulty": "easy",
       "question": "¿Cuál es la capital de Francia?",
       "correctAnswer": "París",
-      "points": 50
+      "points": 50,
+      "timeLimit": 20
     },
     {
       "id": "q3",
       "category": "Ciencias",
-      "difficulty": "hard",
+      "difficulty": "medium",
       "question": "¿Cuál es el símbolo químico del oro?",
       "correctAnswer": "Au",
-      "points": 150
+      "points": 75,
+      "timeLimit": 25
     },
     {
       "id": "q4",
       "category": "Matemáticas",
-      "difficulty": "medium",
+      "difficulty": "easy",
       "question": "¿Cuánto es 15 × 12?",
       "correctAnswer": "180",
-      "points": 75
+      "points": 50,
+      "timeLimit": 30
     },
     {
       "id": "q5",
@@ -38,7 +42,8 @@
       "difficulty": "medium",
       "question": "¿Quién escribió 'Cien años de soledad'?",
       "correctAnswer": "Gabriel García Márquez",
-      "points": 100
+      "points": 75,
+      "timeLimit": 25
     },
     {
       "id": "q6",
@@ -46,30 +51,53 @@
       "difficulty": "easy",
       "question": "¿Quién fue el primer presidente de los Estados Unidos?",
       "correctAnswer": "George Washington",
-      "points": 50
+      "points": 50,
+      "timeLimit": 20
     },
     {
       "id": "q7",
       "category": "Ciencias",
-      "difficulty": "medium",
+      "difficulty": "hard",
       "question": "¿Cuántos planetas tiene el sistema solar?",
-      "correctAnswer": "8",
-      "points": 75
+      "correctAnswer": "8 planetas",
+      "points": 150,
+      "timeLimit": 35
     },
     {
       "id": "q8",
       "category": "Geografía",
-      "difficulty": "hard",
+      "difficulty": "medium",
       "question": "¿Cuál es el río más largo del mundo?",
       "correctAnswer": "Río Amazonas",
-      "points": 150
+      "points": 100,
+      "timeLimit": 30
     }
   ],
   "categories": [
-    { "id": "historia", "name": "Historia", "color": "#f59e0b" },
-    { "id": "geografia", "name": "Geografía", "color": "#10b981" },
-    { "id": "ciencias", "name": "Ciencias", "color": "#3b82f6" },
-    { "id": "matematicas", "name": "Matemáticas", "color": "#8b5cf6" },
-    { "id": "literatura", "name": "Literatura", "color": "#ec4899" }
+    {
+      "id": "historia",
+      "name": "Historia",
+      "color": "#f59e0b"
+    },
+    {
+      "id": "geografia",
+      "name": "Geografía",
+      "color": "#10b981"
+    },
+    {
+      "id": "ciencias",
+      "name": "Ciencias",
+      "color": "#3b82f6"
+    },
+    {
+      "id": "matematicas",
+      "name": "Matemáticas",
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "literatura",
+      "name": "Literatura",
+      "color": "#ec4899"
+    }
   ]
 }

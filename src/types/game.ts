@@ -7,6 +7,7 @@ export interface Question {
   question: string
   correctAnswer: string
   points: number
+  timeLimit: number // 👈 NUEVO: Tiempo en segundos para responder
 }
 
 export interface Category {
@@ -42,17 +43,24 @@ export interface GameData {
   gameStates: GameStatus[]
 }
 
-// Mensajes del BroadcastChannel para comunicación Control → Display
+// 👇 NUEVOS: Mensajes para sistema de buzzer
 export type GameMessage =
   | { type: 'START_GAME' }
   | { type: 'NEXT_QUESTION'; questionId: string; questionIndex: number }
   | { type: 'SHOW_ANSWER'; answer: string }
   | { type: 'MARK_CORRECT'; teamId: string; points: number }
   | { type: 'MARK_WRONG'; teamId: string }
-  | { type: 'SHOW_LEADERBOARD'; teams: Team[] } // 👈 MODIFICADO: Incluye teams
-  | { type: 'CLOSE_LEADERBOARD' } // 👈 NUEVO MENSAJE
+  | { type: 'SHOW_LEADERBOARD'; teams: Team[] }
+  | { type: 'CLOSE_LEADERBOARD' }
   | { type: 'RESET_GAME' }
   | { type: 'UPDATE_TEAMS'; teams: Team[] }
+  // 🔥 NUEVOS MENSAJES PARA BUZZER
+  | { type: 'TEAM_BUZZED'; teamId: string; teamName: string; teamColor: string } // Equipo tocó buzzer
+  | { type: 'START_TIMER'; timeLimit: number } // Inicia countdown
+  | { type: 'UPDATE_TIMER'; timeRemaining: number } // Actualiza segundos
+  | { type: 'TIME_EXPIRED' } // Se acabó el tiempo
+  | { type: 'STOP_TIMER' } // Detiene timer
+  | { type: 'RESET_QUESTION_STATE' } // Resetea estado de pregunta actual
 
 export interface QuestionsData {
   questions: Question[]
