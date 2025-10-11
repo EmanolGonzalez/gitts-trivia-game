@@ -1,5 +1,5 @@
 // src/stores/game.ts
-import { ref, computed } from 'vue'
+import { ref, computed, toRaw } from 'vue' // 👈 Importar toRaw
 import { defineStore } from 'pinia'
 import type {
   Question,
@@ -158,7 +158,8 @@ export const useGameStore = defineStore('game', () => {
     if (team) {
       team.score += points
       team.correctAnswers++
-      sendMessage({ type: 'UPDATE_TEAMS', teams: teams.value })
+      // 🔥 FIX: Usar toRaw() para evitar DataCloneError
+      sendMessage({ type: 'UPDATE_TEAMS', teams: toRaw(teams.value) })
     }
   }
 
@@ -166,7 +167,8 @@ export const useGameStore = defineStore('game', () => {
     const team = teams.value.find((t) => t.id === teamId)
     if (team) {
       team.wrongAnswers++
-      sendMessage({ type: 'UPDATE_TEAMS', teams: teams.value })
+      // 🔥 FIX: Usar toRaw() para evitar DataCloneError
+      sendMessage({ type: 'UPDATE_TEAMS', teams: toRaw(teams.value) })
     }
   }
 
@@ -174,8 +176,8 @@ export const useGameStore = defineStore('game', () => {
     // 👈 MODIFICADO: Guardar estado actual antes de cambiar
     previousGameStatus.value = gameStatus.value
     gameStatus.value = 'leaderboard'
-    // 🔥 FIX: Enviar teams actualizados junto con el mensaje
-    sendMessage({ type: 'SHOW_LEADERBOARD', teams: teams.value })
+    // 🔥 FIX: Usar toRaw() para evitar DataCloneError
+    sendMessage({ type: 'SHOW_LEADERBOARD', teams: toRaw(teams.value) })
   }
 
   // 👇 NUEVA FUNCIÓN
