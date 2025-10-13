@@ -1,111 +1,152 @@
 {
+  "categories": [
+    { "id": "general", "name": "Cultura General", "icon": "Sparkles" },
+    { "id": "science", "name": "Ciencia", "icon": "Atom" },
+    { "id": "history", "name": "Historia", "icon": "Building" },
+    { "id": "sports", "name": "Deportes", "icon": "Trophy" },
+    { "id": "tech", "name": "Tecnología", "icon": "Cpu" },
+    { "id": "culture", "name": "Arte & Cultura", "icon": "Palette" }
+  ],
   "questions": [
     {
-      "id": "q1",
-      "category": "Historia",
-      "difficulty": "medium",
-      "question": "¿En qué año Panamá se independizó de Colombia?",
-      "correctAnswer": "1903",
-      "points": 100,
-      "timeLimit": 30,
-      "buzzerTimeLimit": 15
+      "id": "q-001",
+      "categoryId": "general",
+      "text": "¿Cuál es el océano más grande del mundo?",
+      "answer": "El Océano Pacífico.",
+      "points": 100
     },
     {
-      "id": "q2",
-      "category": "Geografía",
-      "difficulty": "easy",
-      "question": "¿Cuál es la capital de Francia?",
-      "correctAnswer": "París",
-      "points": 50,
-      "timeLimit": 20,
-      "buzzerTimeLimit": 10
+      "id": "q-002",
+      "categoryId": "general",
+      "text": "¿Qué país tiene más población actualmente?",
+      "answer": "India.",
+      "points": 150
     },
     {
-      "id": "q3",
-      "category": "Ciencias",
-      "difficulty": "medium",
-      "question": "¿Cuál es el símbolo químico del oro?",
-      "correctAnswer": "Au",
-      "points": 75,
-      "timeLimit": 25,
-      "buzzerTimeLimit": 12
+      "id": "q-003",
+      "categoryId": "science",
+      "text": "¿Cómo se llama la fuerza que nos mantiene pegados a la Tierra?",
+      "answer": "La gravedad.",
+      "points": 100
     },
     {
-      "id": "q4",
-      "category": "Matemáticas",
-      "difficulty": "easy",
-      "question": "¿Cuánto es 15 × 12?",
-      "correctAnswer": "180",
-      "points": 50,
-      "timeLimit": 30,
-      "buzzerTimeLimit": 15
+      "id": "q-004",
+      "categoryId": "science",
+      "text": "¿Cuál es la fórmula química del agua?",
+      "answer": "H₂O.",
+      "points": 100
     },
     {
-      "id": "q5",
-      "category": "Literatura",
-      "difficulty": "medium",
-      "question": "¿Quién escribió 'Cien años de soledad'?",
-      "correctAnswer": "Gabriel García Márquez",
-      "points": 75,
-      "timeLimit": 25,
-      "buzzerTimeLimit": 12
+      "id": "q-005",
+      "categoryId": "science",
+      "text": "¿Qué partícula subatómica tiene carga negativa?",
+      "answer": "El electrón.",
+      "points": 150
     },
     {
-      "id": "q6",
-      "category": "Historia",
-      "difficulty": "easy",
-      "question": "¿Quién fue el primer presidente de los Estados Unidos?",
-      "correctAnswer": "George Washington",
-      "points": 50,
-      "timeLimit": 20,
-      "buzzerTimeLimit": 10
+      "id": "q-006",
+      "categoryId": "history",
+      "text": "¿En qué año llegó Cristóbal Colón a América?",
+      "answer": "En 1492.",
+      "points": 150
     },
     {
-      "id": "q7",
-      "category": "Ciencias",
-      "difficulty": "hard",
-      "question": "¿Cuántos planetas tiene el sistema solar?",
-      "correctAnswer": "8 planetas",
-      "points": 150,
-      "timeLimit": 35,
-      "buzzerTimeLimit": 15
+      "id": "q-007",
+      "categoryId": "history",
+      "text": "¿Qué muro cayó en 1989 marcando el final de la Guerra Fría?",
+      "answer": "El Muro de Berlín.",
+      "points": 200
     },
     {
-      "id": "q8",
-      "category": "Geografía",
-      "difficulty": "medium",
-      "question": "¿Cuál es el río más largo del mundo?",
-      "correctAnswer": "Río Amazonas",
-      "points": 100,
-      "timeLimit": 30,
-      "buzzerTimeLimit": 15
-    }
-  ],
-  "categories": [
-    {
-      "id": "historia",
-      "name": "Historia",
-      "color": "#f59e0b"
+      "id": "q-008",
+      "categoryId": "sports",
+      "text": "¿Cuántos jugadores por equipo hay en la cancha en un partido de fútbol (soccer)?",
+      "answer": "Once (11).",
+      "points": 100
     },
     {
-      "id": "geografia",
-      "name": "Geografía",
-      "color": "#10b981"
+      "id": "q-009",
+      "categoryId": "sports",
+      "text": "¿Qué país ganó el Mundial de la FIFA 2022?",
+      "answer": "Argentina.",
+      "points": 150
     },
     {
-      "id": "ciencias",
-      "name": "Ciencias",
-      "color": "#3b82f6"
+      "id": "q-010",
+      "categoryId": "tech",
+      "text": "¿Qué significa la sigla 'CPU'?",
+      "answer": "Unidad Central de Procesamiento (Central Processing Unit).",
+      "points": 100
     },
     {
-      "id": "matematicas",
-      "name": "Matemáticas",
-      "color": "#8b5cf6"
+      "id": "q-011",
+      "categoryId": "tech",
+      "text": "¿Qué protocolo seguro reemplaza a HTTP para cifrar el tráfico web?",
+      "answer": "HTTPS (HTTP sobre TLS/SSL).",
+      "points": 150
     },
     {
-      "id": "literatura",
-      "name": "Literatura",
-      "color": "#ec4899"
+      "id": "q-012",
+      "categoryId": "culture",
+      "text": "¿Quién pintó la 'Mona Lisa'?",
+      "answer": "Leonardo da Vinci.",
+      "points": 100
+    },
+    {
+      "id": "q-013",
+      "categoryId": "culture",
+      "text": "¿Qué escritor es autor de 'Cien años de soledad'?",
+      "answer": "Gabriel García Márquez.",
+      "points": 150
+    },
+    {
+      "id": "q-014",
+      "categoryId": "general",
+      "text": "¿Cuál es la capital de Panamá?",
+      "answer": "Ciudad de Panamá.",
+      "points": 100
+    },
+    {
+      "id": "q-015",
+      "categoryId": "science",
+      "text": "¿Qué gas es esencial para la respiración humana?",
+      "answer": "Oxígeno (O₂).",
+      "points": 100
+    },
+    {
+      "id": "q-016",
+      "categoryId": "history",
+      "text": "¿Quién fue el primer presidente de los Estados Unidos?",
+      "answer": "George Washington.",
+      "points": 150
+    },
+    {
+      "id": "q-017",
+      "categoryId": "sports",
+      "text": "¿En qué deporte se utiliza el término 'love' para indicar cero puntos?",
+      "answer": "En el tenis.",
+      "points": 150
+    },
+    {
+      "id": "q-018",
+      "categoryId": "tech",
+      "text": "¿Qué tipo de aprendizaje automático utiliza redes neuronales profundas?",
+      "answer": "Aprendizaje profundo (Deep Learning).",
+      "points": 200
+    },
+    {
+      "id": "q-019",
+      "categoryId": "culture",
+      "text": "¿De qué país es originario el tango?",
+      "answer": "Argentina (y Uruguay, como música rioplatense).",
+      "points": 200
+    },
+    {
+      "id": "q-020",
+      "categoryId": "general",
+      "text": "¿Qué idioma tiene más hablantes nativos en el mundo?",
+      "answer": "El chino mandarín.",
+      "points": 200
     }
   ]
 }

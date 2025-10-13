@@ -1,52 +1,12 @@
 {
-  "currentGame": {
-    "id": "game_001",
-    "name": "Electric Quiz",
-    "status": "waiting",
-    "currentQuestionIndex": -1,
-    "currentQuestionId": null,
-    "startedAt": null,
-    "showCorrectAnswer": false
-  },
   "teams": [
-    {
-      "id": "team1",
-      "name": "Equipo Alpha",
-      "color": "#3b82f6",
-      "score": 0,
-      "correctAnswers": 0,
-      "wrongAnswers": 0
-    },
-    {
-      "id": "team2",
-      "name": "Equipo Beta",
-      "color": "#10b981",
-      "score": 0,
-      "correctAnswers": 0,
-      "wrongAnswers": 0
-    },
-    {
-      "id": "team3",
-      "name": "Equipo Gamma",
-      "color": "#f59e0b",
-      "score": 0,
-      "correctAnswers": 0,
-      "wrongAnswers": 0
-    },
-    {
-      "id": "team4",
-      "name": "Equipo Delta",
-      "color": "#ec4899",
-      "score": 0,
-      "correctAnswers": 0,
-      "wrongAnswers": 0
-    }
+    { "id": "t-azules",    "name": "Azules",    "score": 0, "color": "#3b82f6" },
+    { "id": "t-rojos",     "name": "Rojos",     "score": 0, "color": "#ef4444" },
+    { "id": "t-verdes",    "name": "Verdes",    "score": 0, "color": "#22c55e" },
+    { "id": "t-amarillos", "name": "Amarillos", "score": 0, "color": "#f59e0b" }
   ],
-  "gameStates": [
-    "waiting",
-    "question",
-    "show_answer",
-    "leaderboard",
-    "finished"
-  ]
+  "settings": {
+    "defaultTimeLimit": 30,
+    "buzzerTimeLimit": 10
+  }
 }

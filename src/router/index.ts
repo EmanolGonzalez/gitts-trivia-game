@@ -13,7 +13,7 @@ const router = createRouter({
       path: '/questions',
       name: 'Questions',
       component: () => import('../views/Questions.vue'),
-      meta: { layout: 'blank' },
+      meta: { layout: 'default' },
     },
     {
       path: '/waiting',
