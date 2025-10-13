@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, computed, ref, watch } from 'vue'
+import { onMounted, onBeforeUnmount, computed, ref } from 'vue'
 import { useGameStore } from '@/stores/game'
 
 type DecisionKind = 'correct' | 'incorrect' | null
@@ -8,15 +8,28 @@ const game = useGameStore()
 
 // ----------- Derivados de estado -----------
 const q = computed(() => game.currentQuestion)
-const category = computed(() =>
-  game.categories.find(c => c.id === q.value?.categoryId)
-)
-const teamsSorted = computed(() =>
-  [...game.teams].sort((a, b) => b.score - a.score)
-)
+const category = computed(() => game.categories.find((c) => c.id === q.value?.categoryId))
+const teamsSorted = computed(() => [...game.teams].sort((a, b) => b.score - a.score))
 const activeTeam = computed(() => game.activeTeam)
 const timeMain = computed(() => game.timeRemaining)
 const timeBuzzer = computed(() => game.buzzerTimeRemaining)
+const isPaused = computed(() => !game.isTimerActive && game.timeRemaining > 0)
+const isQuestion = computed(() => game.displayMode === 'question')
+
+// Progreso (aprox) para barras
+const generalProgress = computed(() => {
+  const total = q.value?.timeLimit ?? game.defaultTimeLimit
+  if (!total || total <= 0) return 0
+  return Math.min(100, Math.max(0, Math.round((Math.max(0, game.timeRemaining) / total) * 100)))
+})
+const buzzerProgress = computed(() => {
+  const total = q.value?.buzzerTimeLimit ?? game.buzzerTimeLimit
+  if (!total || total <= 0) return 0
+  return Math.min(
+    100,
+    Math.max(0, Math.round((Math.max(0, game.buzzerTimeRemaining) / total) * 100)),
+  )
+})
 
 // ----------- UX del overlay de calificación -----------
 const decisionKind = ref<DecisionKind>(null)
@@ -39,9 +52,7 @@ function showDecision(kind: DecisionKind, teamId: string | null, pts: number | n
   }, 1800)
 }
 
-const decisionTeam = computed(() =>
-  game.teams.find(t => t.id === decisionTeamId.value) ?? null
-)
+const decisionTeam = computed(() => game.teams.find((t) => t.id === decisionTeamId.value) ?? null)
 
 // ----------- Oír el canal SOLO para UX (no muta estado) -----------
 let uxChannel: BroadcastChannel | null = null
@@ -51,7 +62,6 @@ function initUXChannel() {
     const msg = ev.data as { type?: string; teamId?: string; points?: number }
     if (!msg?.type) return
     if (msg.type === 'MARK_CORRECT') {
-      // Si no llegó points, inferimos por la pregunta actual
       const pts = typeof msg.points === 'number' ? msg.points : (q.value?.points ?? null)
       showDecision('correct', msg.teamId ?? null, pts)
     }
@@ -68,82 +78,118 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (uxChannel) {
-    try { uxChannel.close() } catch {}
+    try {
+      uxChannel.close()
+    } catch {}
     uxChannel = null
   }
 })
 
 // ----------- Helpers visuales -----------
 const displayIs = (m: string) => game.displayMode === (m as any)
-const pill = (txt: string) =>
-  txt.padStart(2, '0')
 
-// para el header de categoría
+// para el header de categoría (opcional si tienes icon en Category)
 const categoryIconPath = computed(() => {
-  switch (category.value?.icon) {
-    case 'Sparkles': return 'M12 2l2.39 4.84L20 8l-4 3.9L17 18l-5-2.6L7 18l1-6.1L4 8l5.61-1.16L12 2z'
-    case 'Atom': return 'M12 2a10 10 0 100 20 10 10 0 000-20zm0 6a2 2 0 110 4 2 2 0 010-4z'
-    case 'Building': return 'M4 20h16V6l-8-4-8 4v14zm6-2H6v-2h4v2zm4 0h4v-2h-4v2zM6 14h4v-2H6v2zm8 0h4v-2h-4v2z'
-    case 'Trophy': return 'M8 4h8v2h2a3 3 0 01-3 3h-1a5 5 0 01-10 0H3a3 3 0 01-3-3h2V4h6zM6 20h12v-2H6v2z'
-    case 'Cpu': return 'M9 7h6v6H9zM5 9h2v2H5zM17 9h2v2h-2zM9 17h2v2H9zM13 17h2v2h-2z'
-    case 'Palette': return 'M12 3a9 9 0 100 18c3 0 3-2 3-3h3a3 3 0 000-6h-1a5 5 0 10-5-9z'
-    default: return null
+  switch ((category.value as any)?.icon) {
+    case 'Sparkles':
+      return 'M12 2l2.39 4.84L20 8l-4 3.9L17 18l-5-2.6L7 18l1-6.1L4 8l5.61-1.16L12 2z'
+    case 'Atom':
+      return 'M12 2a10 10 0 100 20 10 10 0 000-20zm0 6a2 2 0 110 4 2 2 0 010-4z'
+    case 'Building':
+      return 'M4 20h16V6l-8-4-8 4v14zm6-2H6v-2h4v2zm4 0h4v-2h-4v2zM6 14h4v-2H6v2zm8 0h4v-2h-4v2z'
+    case 'Trophy':
+      return 'M8 4h8v2h2a3 3 0 01-3 3h-1a5 5 0 01-10 0H3a3 3 0 01-3-3h2V4h6zM6 20h12v-2H6v2z'
+    case 'Cpu':
+      return 'M9 7h6v6H9zM5 9h2v2H5zM17 9h2v2h-2zM9 17h2v2H9zM13 17h2v2h-2z'
+    case 'Palette':
+      return 'M12 3a9 9 0 100 18c3 0 3-2 3-3h3a3 3 0 000-6h-1a5 5 0 10-5-9z'
+    default:
+      return null
   }
 })
 
 // Color de equipo activo
 const activeRing = computed(() => activeTeam.value?.color ?? '#60a5fa')
-
-// Mostrar leyenda “otro equipo puede responder” tras fallo
-const showPassToOthers = computed(() =>
-  decisionVisible.value && decisionKind.value === 'incorrect'
-)
 </script>
 
 <template>
-  <div class="min-h-dvh w-full bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100 relative overflow-hidden">
+  <div
+    class="min-h-dvh w-full bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100 relative overflow-hidden"
+  >
     <!-- BG decorativo -->
     <div class="pointer-events-none absolute inset-0 opacity-15">
-      <div class="absolute -top-20 -left-24 w-[36rem] h-[36rem] bg-cyan-500/20 blur-3xl rounded-full"></div>
-      <div class="absolute -bottom-24 -right-16 w-[34rem] h-[34rem] bg-fuchsia-500/20 blur-3xl rounded-full"></div>
+      <div
+        class="absolute -top-20 -left-24 w-[36rem] h-[36rem] bg-cyan-500/20 blur-3xl rounded-full"
+      ></div>
+      <div
+        class="absolute -bottom-24 -right-16 w-[34rem] h-[34rem] bg-fuchsia-500/20 blur-3xl rounded-full"
+      ></div>
     </div>
 
     <!-- HEADER -->
-    <header class="relative z-10 container mx-auto px-4 pt-6 pb-3 flex items-center justify-between">
+    <header
+      class="relative z-10 container mx-auto px-4 pt-6 pb-3 flex items-center justify-between"
+    >
       <div class="flex items-center gap-3">
-        <div v-if="categoryIconPath" class="h-10 w-10 grid place-items-center rounded-xl bg-white/10 ring-1 ring-white/10">
+        <div
+          v-if="categoryIconPath"
+          class="h-10 w-10 grid place-items-center rounded-xl bg-white/10 ring-1 ring-white/10"
+        >
           <svg viewBox="0 0 24 24" class="h-6 w-6">
             <path :d="categoryIconPath!" fill="currentColor"></path>
           </svg>
         </div>
         <div>
           <p class="text-xs uppercase tracking-widest text-slate-400">Categoría</p>
-          <h2 class="text-xl font-semibold leading-tight">
-            {{ category?.name ?? '—' }}
-          </h2>
+          <h2 class="text-xl font-semibold leading-tight">{{ category?.name ?? '—' }}</h2>
         </div>
       </div>
 
-      <!-- Timers -->
+      <!-- Timers (Header): muestra buzzer si está activo; si no, el general -->
       <div class="flex items-center gap-3">
         <!-- Timer general -->
         <div
-          class="rounded-xl bg-white/10 ring-1 ring-white/10 px-3 py-2 flex items-center gap-2"
-          :class="{'animate-pulse': game.isTimerActive}"
-          aria-label="Tiempo general restante"
+          v-if="!game.isBuzzerTimerActive && game.displayMode === 'question'"
+          class="rounded-xl bg-sky-500/15 ring-1 ring-sky-400/30 px-3 py-2 flex items-center gap-3"
+          aria-label="Tiempo de pregunta"
         >
-          <span class="text-xs text-slate-300">Tiempo</span>
+          <div
+            class="hidden sm:block w-28 h-1.5 rounded bg-white/10 overflow-hidden"
+            role="progressbar"
+            :aria-valuenow="generalProgress"
+            aria-valuemin="0"
+            aria-valuemax="100"
+          >
+            <div
+              class="h-1.5 bg-sky-400 transition-[width] duration-200"
+              :style="{ width: generalProgress + '%' }"
+            ></div>
+          </div>
+          <span class="text-xs text-sky-200">Tiempo</span>
           <span class="tabular-nums text-lg font-bold">
-            {{ pill(String(Math.floor((timeMain ?? 0) / 60))) }}:{{ pill(String((timeMain ?? 0) % 60)) }}
+            <template v-if="game.isTimerActive">{{ timeMain }}</template>
+            <template v-else>⏸</template>
           </span>
         </div>
 
-        <!-- Timer buzzer (solo si activo) -->
+        <!-- Timer buzzer -->
         <div
           v-if="game.isBuzzerTimerActive"
-          class="rounded-xl bg-rose-500/20 ring-1 ring-rose-400/30 px-3 py-2 flex items-center gap-2"
+          class="rounded-xl bg-rose-500/20 ring-1 ring-rose-400/30 px-3 py-2 flex items-center gap-3"
           aria-label="Tiempo de respuesta del equipo"
         >
+          <div
+            class="hidden sm:block w-28 h-1.5 rounded bg-white/10 overflow-hidden"
+            role="progressbar"
+            :aria-valuenow="buzzerProgress"
+            aria-valuemin="0"
+            aria-valuemax="100"
+          >
+            <div
+              class="h-1.5 bg-rose-400 transition-[width] duration-200"
+              :style="{ width: buzzerProgress + '%' }"
+            ></div>
+          </div>
           <span class="text-xs text-rose-200">Buzzer</span>
           <span class="tabular-nums text-lg font-bold">{{ timeBuzzer }}</span>
         </div>
@@ -155,7 +201,9 @@ const showPassToOthers = computed(() =>
       <!-- Espera -->
       <section v-if="displayIs('waiting')" class="h-[68vh] grid place-items-center">
         <div class="text-center">
-          <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight">¡Prepárense para jugar!</h1>
+          <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight">
+            ¡Prepárense para jugar!
+          </h1>
           <p class="mt-3 text-slate-300">El controlador iniciará la partida en breve…</p>
         </div>
       </section>
@@ -189,16 +237,33 @@ const showPassToOthers = computed(() =>
 
       <!-- Pregunta -->
       <section v-else-if="displayIs('question')" class="mt-2">
-        <div class="relative rounded-3xl bg-white/5 ring-1 ring-white/10 p-6 md:p-8 overflow-hidden">
+        <div
+          class="relative rounded-3xl bg-white/5 ring-1 ring-white/10 p-6 md:p-8 overflow-hidden"
+        >
           <!-- Glow -->
-          <div class="absolute -inset-1 opacity-20 pointer-events-none"
-               :style="{ background: `radial-gradient(600px circle at 50% -10%, ${activeRing}33, transparent 40%)` }">
-          </div>
+          <div
+            class="absolute -inset-1 opacity-20 pointer-events-none"
+            :style="{
+              background: `radial-gradient(600px circle at 50% -10%, ${activeRing}33, transparent 40%)`,
+            }"
+          ></div>
 
-          <p class="text-sm uppercase tracking-widest text-slate-400">Pregunta</p>
-          <h1 class="mt-2 text-3xl md:text-4xl font-bold leading-tight">
-            {{ q?.text ?? '—' }}
-          </h1>
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="text-sm uppercase tracking-widest text-slate-400">Pregunta</p>
+              <h1 class="mt-2 text-3xl md:text-4xl font-bold leading-tight">
+                {{ q?.text ?? '—' }}
+              </h1>
+            </div>
+
+            <!-- Indicador de pausado -->
+            <div v-if="isPaused" class="hidden md:flex items-center gap-2">
+              <span class="text-xs text-slate-300">Reloj</span>
+              <span class="px-2 py-1 rounded bg-slate-800/80 ring-1 ring-white/10 text-xs"
+                >⏸ Pausado</span
+              >
+            </div>
+          </div>
 
           <!-- Equipo activo -->
           <div class="mt-6 flex items-center justify-between">
@@ -206,12 +271,15 @@ const showPassToOthers = computed(() =>
               <div
                 class="h-3 w-3 rounded-full"
                 :style="{ backgroundColor: activeRing }"
-                :class="{'animate-pulse': !!activeTeam}"
+                :class="{ 'animate-pulse': !!activeTeam }"
                 aria-hidden="true"
               />
               <p class="text-sm text-slate-300">
                 <span v-if="activeTeam">
-                  Turno de <span class="font-semibold" :style="{ color: activeRing }">{{ activeTeam.name }}</span>
+                  Turno de
+                  <span class="font-semibold" :style="{ color: activeRing }">
+                    {{ activeTeam.name }}
+                  </span>
                 </span>
                 <span v-else>Esperando timbre de algún equipo…</span>
               </p>
@@ -221,6 +289,42 @@ const showPassToOthers = computed(() =>
               <p class="text-xs text-slate-400">Puntos</p>
               <p class="text-2xl font-extrabold tabular-nums">{{ q?.points ?? 0 }}</p>
             </div>
+          </div>
+
+          <!-- Barra de progreso general (dentro de la tarjeta) -->
+          <div v-if="!game.isBuzzerTimerActive" class="mt-6">
+            <div
+              class="h-2 rounded bg-slate-800/60 overflow-hidden"
+              role="progressbar"
+              aria-label="Tiempo de pregunta"
+              :aria-valuenow="generalProgress"
+              aria-valuemin="0"
+              aria-valuemax="100"
+            >
+              <div
+                class="h-2 bg-sky-400 transition-[width] duration-200"
+                :style="{ width: generalProgress + '%' }"
+              ></div>
+            </div>
+            <div class="mt-1 text-[11px] text-slate-400">{{ generalProgress }}%</div>
+          </div>
+
+          <!-- Barra de progreso buzzer (si activo) -->
+          <div v-else class="mt-6">
+            <div
+              class="h-2 rounded bg-slate-800/60 overflow-hidden"
+              role="progressbar"
+              aria-label="Tiempo del equipo"
+              :aria-valuenow="buzzerProgress"
+              aria-valuemin="0"
+              aria-valuemax="100"
+            >
+              <div
+                class="h-2 bg-rose-400 transition-[width] duration-200"
+                :style="{ width: buzzerProgress + '%' }"
+              ></div>
+            </div>
+            <div class="mt-1 text-[11px] text-slate-400">{{ buzzerProgress }}%</div>
           </div>
         </div>
       </section>
@@ -235,7 +339,7 @@ const showPassToOthers = computed(() =>
         </div>
       </section>
 
-      <!-- Fallback (por si acaso) -->
+      <!-- Fallback -->
       <section v-else class="h-[60vh] grid place-items-center text-slate-400">
         <p>Esperando instrucciones del controlador…</p>
       </section>
@@ -249,9 +353,11 @@ const showPassToOthers = computed(() =>
       >
         <div
           class="rounded-3xl px-8 py-6 text-center shadow-2xl"
-          :class="decisionKind === 'correct'
-                    ? 'bg-emerald-600/90 ring-1 ring-emerald-300/40'
-                    : 'bg-rose-600/90 ring-1 ring-rose-300/40'"
+          :class="
+            decisionKind === 'correct'
+              ? 'bg-emerald-600/90 ring-1 ring-emerald-300/40'
+              : 'bg-rose-600/90 ring-1 ring-rose-300/40'
+          "
         >
           <p class="text-sm uppercase tracking-widest text-white/80">
             {{ decisionKind === 'correct' ? '¡Respuesta correcta!' : 'Respuesta incorrecta' }}
@@ -262,14 +368,14 @@ const showPassToOthers = computed(() =>
             <span v-else>Equipo</span>
           </h3>
 
-          <p v-if="decisionKind === 'correct' && decisionPoints != null"
-             class="mt-1 text-xl font-semibold text-white/90">
+          <p
+            v-if="decisionKind === 'correct' && decisionPoints != null"
+            class="mt-1 text-xl font-semibold text-white/90"
+          >
             +{{ decisionPoints }} puntos
           </p>
 
-          <p v-if="showPassToOthers" class="mt-3 text-white/90">
-            Otro equipo puede responder…
-          </p>
+          <p v-else class="mt-3 text-white/90">Otro equipo puede responder…</p>
         </div>
       </div>
     </transition>
@@ -278,7 +384,11 @@ const showPassToOthers = computed(() =>
 
 <style scoped>
 .fade-enter-active,
-.fade-leave-active { transition: opacity .25s ease; }
+.fade-leave-active {
+  transition: opacity 0.25s ease;
+}
 .fade-enter-from,
-.fade-leave-to { opacity: 0; }
+.fade-leave-to {
+  opacity: 0;
+}
 </style>

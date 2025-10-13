@@ -104,7 +104,6 @@
           <li><router-link to="/" class="flex items-center">Inicio</router-link></li>
           <li><router-link to="/questions" class="flex items-center">Preguntas</router-link></li>
           <li><router-link to="/groups" class="flex items-center">Grupos</router-link></li>
-          <li><router-link to="/results" class="flex items-center">Resultados</router-link></li>
         </ul>
       </div>
     </div>

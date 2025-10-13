@@ -41,12 +41,15 @@ export const useGameStore = defineStore('game', () => {
   // Modo visual actual del Display
   const displayMode = ref<DisplayMode>('waiting')
 
-  // Timers
+  // Timers (GENERAL)
   const timeRemaining = ref<number>(0)
   const isTimerActive = ref<boolean>(false)
   const generalDeadline = ref<number | null>(null)
   const generalStartedAt = ref<number | null>(null)
+  // ⚠️ NUEVO: snapshot del tiempo restante al pausar
+  const generalRemainingSnapshot = ref<number | null>(null)
 
+  // Timers (BUZZER)
   const buzzerTimeRemaining = ref<number>(0)
   const isBuzzerTimerActive = ref<boolean>(false)
   const buzzerDeadline = ref<number | null>(null)
@@ -107,6 +110,7 @@ export const useGameStore = defineStore('game', () => {
     timeRemaining.value = 0
     generalDeadline.value = null
     generalStartedAt.value = null
+    generalRemainingSnapshot.value = null // ← limpiar snapshot
 
     if (buzzerTimerInterval.value) clearInterval(buzzerTimerInterval.value)
     buzzerTimerInterval.value = null
@@ -149,6 +153,7 @@ export const useGameStore = defineStore('game', () => {
     const v = bump()
     generalStartedAt.value = now()
     generalDeadline.value = generalStartedAt.value + seconds * 1000
+    generalRemainingSnapshot.value = null // ← importante
     timeRemaining.value = seconds
     isTimerActive.value = true
 
@@ -176,24 +181,68 @@ export const useGameStore = defineStore('game', () => {
     if (timerInterval.value) clearInterval(timerInterval.value)
     timerInterval.value = null
     isTimerActive.value = false
+    generalDeadline.value = null
+    generalStartedAt.value = null
+    generalRemainingSnapshot.value = null // ← limpiar snapshot al stop
     if (emit) sendMessage({ type: 'STOP_TIMER', version: bump() })
   }
 
+  // ⚠️ Cambiado: pausa REAL con snapshot (el deadline deja de correr)
   function pauseGeneralTimer() {
+    if (!generalDeadline.value && generalRemainingSnapshot.value == null) {
+      // nada que pausar
+      return
+    }
+    // tomar remanente actual (en segundos)
+    const remaining = calcRemaining(generalDeadline.value)
+    generalRemainingSnapshot.value = remaining
     if (timerInterval.value) clearInterval(timerInterval.value)
     timerInterval.value = null
     isTimerActive.value = false
+
+    // anular deadline para que no siga decreciendo en segundo plano
+    generalDeadline.value = null
+    generalStartedAt.value = null
+
+    // mantener visible el remanente en timeRemaining (opcional)
+    timeRemaining.value = remaining
+
     sendMessage({ type: 'PAUSE_TIMER', version: bump() })
   }
 
+  // ⚠️ Cambiado: reanudar desde snapshot reconstruyendo deadline
   function resumeGeneralTimer() {
-    if (isTimerActive.value || !generalDeadline.value) return
+    if (isTimerActive.value) return
+
+    // si tenemos snapshot úsalo; si no, calcula desde deadline (fallback)
+    let remaining = generalRemainingSnapshot.value
+    if (remaining == null) {
+      remaining = calcRemaining(generalDeadline.value)
+    }
+
+    if (!remaining || remaining <= 0) {
+      // no queda tiempo, comportarse como expirado
+      stopGeneralTimer(false)
+      sendMessage({ type: 'TIME_EXPIRED', version: bump() })
+      onTimeExpired()
+      return
+    }
+
+    const v = bump()
+    generalStartedAt.value = now()
+    generalDeadline.value = generalStartedAt.value + remaining * 1000
     isTimerActive.value = true
-    sendMessage({ type: 'RESUME_TIMER', version: bump() })
+    generalRemainingSnapshot.value = null // ← consumir snapshot
+
+    sendMessage({
+      type: 'RESUME_TIMER',
+      version: v,
+    })
+
     timerInterval.value = window.setInterval(() => {
-      const remaining = calcRemaining(generalDeadline.value)
-      timeRemaining.value = remaining
-      if (remaining <= 0) {
+      const r = calcRemaining(generalDeadline.value)
+      timeRemaining.value = r
+      if (r <= 0) {
         stopGeneralTimer(false)
         sendMessage({ type: 'TIME_EXPIRED', version: bump() })
         onTimeExpired()
@@ -232,10 +281,14 @@ export const useGameStore = defineStore('game', () => {
     if (buzzerTimerInterval.value) clearInterval(buzzerTimerInterval.value)
     buzzerTimerInterval.value = null
     isBuzzerTimerActive.value = false
+    buzzerTimeRemaining.value = 0
+    buzzerDeadline.value = null
+    buzzerStartedAt.value = null
     if (emit) sendMessage({ type: 'STOP_BUZZER_TIMER', version: bump() })
   }
 
   function onTimeExpired() {
+    // Mantienes tu flujo: review y luego decides avanzar
     status.value = 'review'
   }
 
@@ -243,7 +296,17 @@ export const useGameStore = defineStore('game', () => {
     if (activeTeamId.value) disableTeam(activeTeamId.value)
     activeTeamId.value = null
     hasAnyTeamBuzzed.value = false
-    if (generalDeadline.value && !isTimerActive.value) resumeGeneralTimer()
+
+    // Si no quedan equipos disponibles, cerrar la ronda actual
+    if (availableTeams.value.length === 0) {
+      stopGeneralTimer(false)
+      sendMessage({ type: 'TIME_EXPIRED', version: bump() })
+      onTimeExpired()
+      return
+    }
+
+    // Reanudar el general desde el snapshot
+    resumeGeneralTimer()
   }
 
   /** ---------------------
@@ -387,6 +450,7 @@ export const useGameStore = defineStore('game', () => {
     if (hasAnyTeamBuzzed.value || disabledTeamsForQuestion.value.includes(teamId)) return
     hasAnyTeamBuzzed.value = true
     activeTeamId.value = teamId
+    // Pausa REAL con snapshot
     pauseGeneralTimer()
     startBuzzerTimer(buzzerTimeLimit.value)
     sendMessage({ type: 'TEAM_BUZZED', teamId })
@@ -409,8 +473,19 @@ export const useGameStore = defineStore('game', () => {
     stopBuzzerTimer()
     activeTeamId.value = null
     hasAnyTeamBuzzed.value = false
-    if (generalDeadline.value) resumeGeneralTimer()
-    else onTimeExpired()
+
+    // Si no quedan equipos disponibles -> cerrar la ronda
+    if (availableTeams.value.length === 0) {
+      stopGeneralTimer(false)
+      sendMessage({ type: 'TIME_EXPIRED', version: bump() })
+      onTimeExpired()
+      sendMessage({ type: 'MARK_INCORRECT', teamId })
+      sendStateSnapshot()
+      return
+    }
+
+    // Reanudar desde snapshot
+    resumeGeneralTimer()
     sendMessage({ type: 'MARK_INCORRECT', teamId })
     sendStateSnapshot()
   }
@@ -493,7 +568,10 @@ export const useGameStore = defineStore('game', () => {
         currentQuestionId: currentQuestionId.value,
         activeTeamId: activeTeamId.value,
         hasAnyTeamBuzzed: hasAnyTeamBuzzed.value,
-        timeRemaining: calcRemaining(generalDeadline.value),
+        timeRemaining:
+          generalRemainingSnapshot.value != null
+            ? generalRemainingSnapshot.value
+            : calcRemaining(generalDeadline.value),
         isTimerActive: isTimerActive.value,
         buzzerTimeRemaining: calcRemaining(buzzerDeadline.value),
         isBuzzerTimerActive: isBuzzerTimerActive.value,
@@ -555,6 +633,13 @@ export const useGameStore = defineStore('game', () => {
           buzzerStartedAt.value = bt?.startedAt ?? null
           buzzerDeadline.value = bt?.deadline ?? null
 
+          // si el control está en pausa con snapshot, respetarlo
+          if (!s.isTimerActive && s.timeRemaining != null) {
+            generalRemainingSnapshot.value = s.timeRemaining
+          } else {
+            generalRemainingSnapshot.value = null
+          }
+
           timeRemaining.value = s.timeRemaining
           isTimerActive.value = s.isTimerActive
           buzzerTimeRemaining.value = s.buzzerTimeRemaining
@@ -612,6 +697,7 @@ export const useGameStore = defineStore('game', () => {
         isTimerActive.value = true
         generalStartedAt.value = (msg as any).startedAt
         generalDeadline.value = (msg as any).deadline
+        generalRemainingSnapshot.value = null
         timeRemaining.value = calcRemaining(generalDeadline.value)
         break
       case 'UPDATE_TIMER':
@@ -622,18 +708,22 @@ export const useGameStore = defineStore('game', () => {
         timeRemaining.value = 0
         generalDeadline.value = null
         generalStartedAt.value = null
+        generalRemainingSnapshot.value = null
         onTimeExpired()
         break
       case 'STOP_TIMER':
         isTimerActive.value = false
         generalDeadline.value = null
         generalStartedAt.value = null
+        generalRemainingSnapshot.value = null
         break
       case 'PAUSE_TIMER':
         isTimerActive.value = false
+        // mantener el snapshot que llega por snapshot periódico
         break
       case 'RESUME_TIMER':
         isTimerActive.value = true
+        generalRemainingSnapshot.value = null
         break
 
       // Timers buzzer
