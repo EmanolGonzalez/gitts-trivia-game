@@ -1,10 +1,5 @@
 {
-  "teams": [
-    { "id": "t-azules",    "name": "Azules",    "score": 0, "color": "#3b82f6" },
-    { "id": "t-rojos",     "name": "Rojos",     "score": 0, "color": "#ef4444" },
-    { "id": "t-verdes",    "name": "Verdes",    "score": 0, "color": "#22c55e" },
-    { "id": "t-amarillos", "name": "Amarillos", "score": 0, "color": "#f59e0b" }
-  ],
+  "teams": [],
   "settings": {
     "defaultTimeLimit": 30,
     "buzzerTimeLimit": 10

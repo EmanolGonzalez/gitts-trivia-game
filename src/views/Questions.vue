@@ -59,17 +59,26 @@ const iconOptions = [
    CARGA INICIAL
 ------------------------------ */
 onMounted(async () => {
-  // Si el store aún no tiene datos, cárgalos del /public/data
-  if (game.questions.length === 0 || game.categories.length === 0) {
-    try {
-      await game.loadFromPublicData()
-    } catch {}
-  }
+  // Ensure store loads data (prefer localStorage if present)
+  try {
+    await game.ensureDataLoaded()
+  } catch {}
   // Copias locales
   categories.value = game.categories.map((c) => ({ ...c }))
   questions.value = game.questions.map((q) => ({ ...q }))
   // Persist to localStorage after loading initial data
-  game.saveQuestionsToLocalStorage({ categories: categories.value, questions: questions.value })
+  game.saveToLocalStorage(
+    {
+      teams: game.teams,
+      settings: {
+        defaultTimeLimit: game.defaultTimeLimit,
+        buzzerTimeLimit: game.buzzerTimeLimit,
+        sampleSize: game.sampleSize,
+        sampleRandomized: game.sampleRandomized,
+      },
+    },
+    { categories: categories.value, questions: questions.value },
+  )
 })
 
 /* -----------------------------
@@ -85,7 +94,7 @@ const stats = computed(() => {
   const perCat: Record<string, number> = {}
   for (const c of categories.value) perCat[c.id] = 0
   for (const q of questions.value) {
-    if (perCat[q.categoryId] != null) perCat[q.categoryId]++
+    perCat[q.categoryId] = (perCat[q.categoryId] ?? 0) + 1
   }
   return {
     totalQuestions: questions.value.length,
@@ -182,8 +191,8 @@ function uid(prefix: string, digits = 3) {
   return `${prefix}${Date.now()}`
 }
 function numericSuffix(id: string) {
-  const m = id.match(/(\d+)$/)
-  return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER
+  const m = String(id).match(/(\d+)$/)
+  return m ? parseInt(m[1] ?? '0', 10) : Number.MAX_SAFE_INTEGER
 }
 function resetQForm() {
   qForm.id = uid('q-')
@@ -286,8 +295,21 @@ function saveEditor() {
       const idx = questions.value.findIndex((q) => q.id === payload.id)
       if (idx >= 0) questions.value[idx] = payload
     }
-    // persist to localStorage after edit
-    game.saveQuestionsToLocalStorage({ categories: categories.value, questions: questions.value })
+    // update central store and persist to localStorage after edit
+    game.categories = categories.value.map((c) => ({ ...c }))
+    game.questions = questions.value.map((q) => ({ ...q }))
+    game.saveToLocalStorage(
+      {
+        teams: game.teams,
+        settings: {
+          defaultTimeLimit: game.defaultTimeLimit,
+          buzzerTimeLimit: game.buzzerTimeLimit,
+          sampleSize: game.sampleSize,
+          sampleRandomized: game.sampleRandomized,
+        },
+      },
+      { categories: categories.value, questions: questions.value },
+    )
   } else {
     const errs = validateCategory(cForm)
     if (errs.length) {
@@ -301,10 +323,14 @@ function saveEditor() {
     }
     if (editorMode.value === 'create') {
       categories.value.push(payload)
+      // persist new category
+      syncStoreAndPersist()
     } else {
       const idx = categories.value.findIndex((c) => c.id === payload.id)
       if (idx >= 0) categories.value[idx] = payload
       // Nota: no renombrar categoryId de preguntas si cambia id (se requiere manual)
+      // persist edited category
+      syncStoreAndPersist()
     }
   }
   showEditor.value = false
@@ -324,7 +350,21 @@ function askConfirm(message: string, onConfirm: () => void) {
 function removeQuestion(q: Question) {
   askConfirm(`¿Eliminar la pregunta "${q.text}"?`, () => {
     questions.value = questions.value.filter((x) => x.id !== q.id)
-    game.saveQuestionsToLocalStorage({ categories: categories.value, questions: questions.value })
+    // sync store + persist
+    game.categories = categories.value.map((c) => ({ ...c }))
+    game.questions = questions.value.map((q) => ({ ...q }))
+    game.saveToLocalStorage(
+      {
+        teams: game.teams,
+        settings: {
+          defaultTimeLimit: game.defaultTimeLimit,
+          buzzerTimeLimit: game.buzzerTimeLimit,
+          sampleSize: game.sampleSize,
+          sampleRandomized: game.sampleRandomized,
+        },
+      },
+      { categories: categories.value, questions: questions.value },
+    )
   })
 }
 function removeCategory(c: Category) {
@@ -344,15 +384,28 @@ function removeCategory(c: Category) {
           q.categoryId === c.id ? { ...q, categoryId: 'uncategorized' } : q,
         )
         categories.value = categories.value.filter((x) => x.id !== c.id)
-        game.saveQuestionsToLocalStorage({
-          categories: categories.value,
-          questions: questions.value,
-        })
+        // sync store + persist
+        game.categories = categories.value.map((c) => ({ ...c }))
+        game.questions = questions.value.map((q) => ({ ...q }))
+        game.saveToLocalStorage(
+          {
+            teams: game.teams,
+            settings: {
+              defaultTimeLimit: game.defaultTimeLimit,
+              buzzerTimeLimit: game.buzzerTimeLimit,
+              sampleSize: game.sampleSize,
+              sampleRandomized: game.sampleRandomized,
+            },
+          },
+          { categories: categories.value, questions: questions.value },
+        )
       },
     )
   } else {
     askConfirm(`¿Eliminar la categoría "${c.name}"?`, () => {
       categories.value = categories.value.filter((x) => x.id !== c.id)
+      // persist removal
+      syncStoreAndPersist()
     })
   }
 }
@@ -379,7 +432,21 @@ function exportJson() {
   a.click()
   URL.revokeObjectURL(url)
   // save also to localStorage after export (keep latest)
-  game.saveQuestionsToLocalStorage(data)
+  // sync store + persist
+  game.categories = data.categories.map((c) => ({ ...c }))
+  game.questions = data.questions.map((q) => ({ ...q }))
+  game.saveToLocalStorage(
+    {
+      teams: game.teams,
+      settings: {
+        defaultTimeLimit: game.defaultTimeLimit,
+        buzzerTimeLimit: game.buzzerTimeLimit,
+        sampleSize: game.sampleSize,
+        sampleRandomized: game.sampleRandomized,
+      },
+    },
+    data,
+  )
 }
 
 const importInput = ref<HTMLInputElement | null>(null)
@@ -407,8 +474,8 @@ function importJsonChange(e: Event) {
         answer: q.answer,
         points: q.points,
       }))
-      // save imported to localStorage
-      game.saveQuestionsToLocalStorage({ categories: categories.value, questions: questions.value })
+      // sync store + persist imported data
+      syncStoreAndPersist()
     } catch {
       alert('No se pudo leer el JSON.')
     } finally {
@@ -436,7 +503,21 @@ function publishToGame() {
   game.sendMessage({ type: 'LOAD_DATA', game: gameData, questions: qd })
   alert('Banco de preguntas y categorías publicado al juego.')
   // also persist locally so control retains changes
-  game.saveQuestionsToLocalStorage(qd)
+  // sync store + persist
+  game.categories = categories.value.map((c) => ({ ...c }))
+  game.questions = questions.value.map((q) => ({ ...q }))
+  game.saveToLocalStorage(
+    {
+      teams: game.teams,
+      settings: {
+        defaultTimeLimit: game.defaultTimeLimit,
+        buzzerTimeLimit: game.buzzerTimeLimit,
+        sampleSize: game.sampleSize,
+        sampleRandomized: game.sampleRandomized,
+      },
+    },
+    qd,
+  )
 }
 
 /* -----------------------------
@@ -448,7 +529,50 @@ function normalizeText() {
     text: q.text.trim().replace(/\s+/g, ' '),
     answer: q.answer.trim().replace(/\s+/g, ' '),
   }))
-  game.saveQuestionsToLocalStorage({ categories: categories.value, questions: questions.value })
+  // sync store + persist
+  game.categories = categories.value.map((c) => ({ ...c }))
+  game.questions = questions.value.map((q) => ({ ...q }))
+  game.saveToLocalStorage(
+    {
+      teams: game.teams,
+      settings: {
+        defaultTimeLimit: game.defaultTimeLimit,
+        buzzerTimeLimit: game.buzzerTimeLimit,
+        sampleSize: game.sampleSize,
+        sampleRandomized: game.sampleRandomized,
+      },
+    },
+    { categories: categories.value, questions: questions.value },
+  )
+}
+
+function syncStoreAndPersist() {
+  // update pinia store using $patch to avoid replacing refs directly
+  try {
+    game.$patch((state: any) => {
+      state.categories = categories.value.map((c: any) => ({ ...c }))
+      state.questions = questions.value.map((q: any) => ({ ...q }))
+    })
+  } catch {
+    // fallback: direct assign
+    try {
+      ;(game as any).categories = categories.value.map((c) => ({ ...c }))
+      ;(game as any).questions = questions.value.map((q) => ({ ...q }))
+    } catch {}
+  }
+  // persist settings + teams
+  game.saveToLocalStorage(
+    {
+      teams: game.teams,
+      settings: {
+        defaultTimeLimit: game.defaultTimeLimit,
+        buzzerTimeLimit: game.buzzerTimeLimit,
+        sampleSize: game.sampleSize,
+        sampleRandomized: game.sampleRandomized,
+      },
+    },
+    { categories: categories.value, questions: questions.value },
+  )
 }
 function fixMissingCategoryRefs() {
   const validIds = new Set(categories.value.map((c) => c.id))
@@ -460,7 +584,21 @@ function fixMissingCategoryRefs() {
   questions.value = questions.value.map((q) =>
     validIds.has(q.categoryId) ? q : { ...q, categoryId: 'uncategorized' },
   )
-  game.saveQuestionsToLocalStorage({ categories: categories.value, questions: questions.value })
+  // sync store + persist
+  game.categories = categories.value.map((c) => ({ ...c }))
+  game.questions = questions.value.map((q) => ({ ...q }))
+  game.saveToLocalStorage(
+    {
+      teams: game.teams,
+      settings: {
+        defaultTimeLimit: game.defaultTimeLimit,
+        buzzerTimeLimit: game.buzzerTimeLimit,
+        sampleSize: game.sampleSize,
+        sampleRandomized: game.sampleRandomized,
+      },
+    },
+    { categories: categories.value, questions: questions.value },
+  )
 }
 function reindexQuestionIds() {
   const sorted = [...questions.value].sort((a, b) => a.text.localeCompare(b.text))
@@ -471,7 +609,21 @@ function reindexQuestionIds() {
     i++
   }
   questions.value = next
-  game.saveQuestionsToLocalStorage({ categories: categories.value, questions: questions.value })
+  // sync store + persist
+  game.categories = categories.value.map((c) => ({ ...c }))
+  game.questions = questions.value.map((q) => ({ ...q }))
+  game.saveToLocalStorage(
+    {
+      teams: game.teams,
+      settings: {
+        defaultTimeLimit: game.defaultTimeLimit,
+        buzzerTimeLimit: game.buzzerTimeLimit,
+        sampleSize: game.sampleSize,
+        sampleRandomized: game.sampleRandomized,
+      },
+    },
+    { categories: categories.value, questions: questions.value },
+  )
 }
 </script>
 
@@ -512,13 +664,6 @@ function reindexQuestionIds() {
             class="hidden"
             @change="importJsonChange"
           />
-          <button
-            @click="publishToGame"
-            :disabled="categories.length === 0 || questions.length === 0"
-            class="btn btn-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl px-4 py-2"
-          >
-            Publicar al juego
-          </button>
         </div>
       </div>
 
@@ -912,8 +1057,15 @@ function reindexQuestionIds() {
 </template>
 
 <style scoped>
-@reference "@/assets/main.css";
 .btn {
-  @apply rounded-xl px-3 py-2 text-sm transition;
+  border-radius: 0.75rem; /* rounded-xl */
+  padding-left: 0.75rem; /* px-3 */
+  padding-right: 0.75rem; /* px-3 */
+  padding-top: 0.5rem; /* py-2 */
+  padding-bottom: 0.5rem; /* py-2 */
+  font-size: 0.875rem; /* text-sm */
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 </style>

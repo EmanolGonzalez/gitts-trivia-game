@@ -1,8 +1,57 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, computed } from 'vue'
+import { onMounted, onUnmounted, computed, ref } from 'vue'
 import { useGameStore } from '@/stores/game'
 
 const game = useGameStore()
+
+// Modal para seleccionar participantes (útil con muchos equipos)
+const participantsModalOpen = ref(false)
+const participationSelection = ref<Record<string, boolean>>({})
+
+// Mostrar todos o solo participantes en la lista de equipos
+// Por defecto en Control mostramos solo participantes
+const showOnlyParticipants = ref(true)
+const teamsToShow = computed(() =>
+  showOnlyParticipants.value ? game.teams.filter((t) => t.enabled ?? true) : game.teams,
+)
+
+function toggleShowOnlyParticipants() {
+  showOnlyParticipants.value = !showOnlyParticipants.value
+}
+
+const showOnlyLabel = computed(() =>
+  showOnlyParticipants.value ? 'Solo participantes' : 'Mostrar todos',
+)
+
+function openParticipantsModal() {
+  // inicializar selección desde el store
+  participationSelection.value = {}
+  for (const t of game.teams) participationSelection.value[t.id] = t.enabled ?? true
+  participantsModalOpen.value = true
+}
+
+function closeParticipantsModal() {
+  participantsModalOpen.value = false
+}
+
+function selectAllParticipants() {
+  for (const id of Object.keys(participationSelection.value))
+    participationSelection.value[id] = true
+}
+
+function clearAllParticipants() {
+  for (const id of Object.keys(participationSelection.value))
+    participationSelection.value[id] = false
+}
+
+function saveParticipants() {
+  // apply changes to store
+  for (const id of Object.keys(participationSelection.value)) {
+    const enabled = !!participationSelection.value[id]
+    game.setTeamParticipation(id, enabled)
+  }
+  participantsModalOpen.value = false
+}
 
 // --------- Lifecycle ---------
 onMounted(() => {
@@ -97,7 +146,8 @@ function onKey(e: KeyboardEvent) {
     next()
   } else if (/^[1-9]$/.test(e.key)) {
     const idx = Number(e.key) - 1
-    const team = game.teams[idx]
+    const list = teamsToShow.value
+    const team = list[idx]
     if (team) buzz(team.id)
   }
 }
@@ -358,14 +408,29 @@ const buzzerProgress = computed(() => {
         <div class="rounded-2xl border border-slate-800 bg-slate-900/50">
           <div class="p-4 border-b border-slate-800 flex items-center justify-between">
             <h2 class="font-semibold">Equipos</h2>
-            <p class="text-xs text-slate-400">
-              Tip: teclas <span class="font-semibold">1..9</span> hacen <em>buzz</em>.
-            </p>
+            <div class="flex items-center gap-3">
+              <button
+                class="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-sm"
+                @click="openParticipantsModal"
+              >
+                Gestionar participantes
+              </button>
+              <button
+                class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-200"
+                @click="toggleShowOnlyParticipants"
+                :title="showOnlyParticipants ? 'Mostrar todos' : 'Mostrar solo participantes'"
+              >
+                {{ showOnlyLabel }}
+              </button>
+              <p class="text-xs text-slate-400">
+                Tip: teclas <span class="font-semibold">1..9</span> hacen <em>buzz</em>.
+              </p>
+            </div>
           </div>
 
           <div class="p-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div
-              v-for="(t, idx) in game.teams"
+              v-for="(t, idx) in teamsToShow"
               :key="t.id"
               class="rounded-xl border border-slate-800 p-4 bg-slate-950/40 flex flex-col gap-3"
             >
@@ -471,7 +536,7 @@ const buzzerProgress = computed(() => {
             </div>
             <div class="flex items-center justify-between">
               <span class="text-slate-400">Equipos:</span>
-              <span class="font-medium">{{ game.teams.length }}</span>
+              <span class="font-medium">{{ teamsToShow.length }}</span>
             </div>
             <div class="flex items-center justify-between">
               <span class="text-slate-400">Modo Display:</span>
@@ -503,5 +568,52 @@ const buzzerProgress = computed(() => {
         </div>
       </aside>
     </main>
+    <!-- Modal: Manage participants -->
+    <div
+      v-if="participantsModalOpen"
+      class="fixed inset-0 z-40 grid place-items-center bg-black/50 px-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="w-full max-w-2xl rounded-xl bg-slate-900 border border-slate-800 p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold">Seleccionar participantes</h3>
+          <div class="flex items-center gap-2">
+            <button class="px-2 py-1 rounded bg-slate-800 text-sm" @click="selectAllParticipants">
+              Todos
+            </button>
+            <button class="px-2 py-1 rounded bg-slate-800 text-sm" @click="clearAllParticipants">
+              Ninguno
+            </button>
+          </div>
+        </div>
+
+        <div class="max-h-[60vh] overflow-auto space-y-2 mb-4">
+          <div v-for="t in game.teams" :key="t.id" class="flex items-center justify-between p-2">
+            <label class="flex items-center gap-3">
+              <input
+                type="checkbox"
+                class="h-4 w-4 accent-sky-500"
+                v-model="participationSelection[t.id]"
+              />
+              <span class="font-medium">{{ t.name }}</span>
+            </label>
+            <div class="text-sm text-slate-400">{{ t.score }} pts</div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-3">
+          <button class="px-3 py-2 rounded bg-slate-800 text-sm" @click="closeParticipantsModal">
+            Cancelar
+          </button>
+          <button
+            class="px-3 py-2 rounded bg-emerald-600 text-white text-sm"
+            @click="saveParticipants"
+          >
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

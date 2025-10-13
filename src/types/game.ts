@@ -24,6 +24,8 @@ export interface Team {
   id: string
   name: string
   score: number
+  /** Participa en la partida (true = participa). Por defecto true si no está presente */
+  enabled?: boolean
   color?: string
 }
 
@@ -31,6 +33,7 @@ export interface Category {
   id: string
   name: string
   color?: string
+  icon?: string
 }
 
 export interface Question {

@@ -9,7 +9,10 @@ const game = useGameStore()
 // ----------- Derivados de estado -----------
 const q = computed(() => game.currentQuestion)
 const category = computed(() => game.categories.find((c) => c.id === q.value?.categoryId))
-const teamsSorted = computed(() => [...game.teams].sort((a, b) => b.score - a.score))
+// Only include teams that are enabled (participating)
+const teamsSorted = computed(() =>
+  [...game.teams].filter((t) => t.enabled ?? true).sort((a, b) => b.score - a.score),
+)
 const activeTeam = computed(() => game.activeTeam)
 const timeMain = computed(() => game.timeRemaining)
 const timeBuzzer = computed(() => game.buzzerTimeRemaining)
@@ -110,22 +113,29 @@ const categoryIconPath = computed(() => {
 
 // Color de equipo activo
 const activeRing = computed(() => activeTeam.value?.color ?? '#60a5fa')
+
+// Helpers para estilo/scale cuando mostramos la decisión
+function boxStyle(
+  team: { id?: string; color?: string } | undefined,
+  prominence: 'small' | 'med' | 'large' = 'med',
+) {
+  if (!team) return {}
+  const color = team.color ?? '#94a3b8'
+  if (team.id === decisionTeamId.value) {
+    if (prominence === 'large') return { boxShadow: `0 22px 60px -22px ${color}aa` }
+    return { boxShadow: `0 18px 48px -12px ${color}88, 0 6px 18px -8px ${color}55 inset` }
+  }
+  if (prominence === 'large') return { boxShadow: `0 18px 40px -18px ${color}88` }
+  return { boxShadow: `0 10px 30px -10px ${color}66` }
+}
+
+function scaleClass(team: { id?: string } | undefined) {
+  return team && team.id === decisionTeamId.value ? 'scale-105' : ''
+}
 </script>
 
 <template>
-  <div
-    class="min-h-dvh w-full bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100 relative overflow-hidden"
-  >
-    <!-- BG decorativo -->
-    <div class="pointer-events-none absolute inset-0 opacity-15">
-      <div
-        class="absolute -top-20 -left-24 w-[36rem] h-[36rem] bg-cyan-500/20 blur-3xl rounded-full"
-      ></div>
-      <div
-        class="absolute -bottom-24 -right-16 w-[34rem] h-[34rem] bg-fuchsia-500/20 blur-3xl rounded-full"
-      ></div>
-    </div>
-
+  <div class="min-h-dvh w-full relative overflow-hidden">
     <!-- HEADER -->
     <header
       class="relative z-10 container mx-auto px-4 pt-6 pb-3 flex items-center justify-between"
@@ -216,21 +226,105 @@ const activeRing = computed(() => activeTeam.value?.color ?? '#60a5fa')
         </div>
       </section>
 
-      <!-- Marcador -->
+      <!-- Marcador: podium style para top3 + lista para el resto -->
       <section v-else-if="displayIs('scoreboard')" class="mt-4">
         <h3 class="text-2xl font-bold mb-4">Tabla de puntuaciones</h3>
-        <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+
+        <!-- Podium top 3 -->
+        <div class="flex items-end justify-center gap-4 mb-6 px-2">
+          <!-- Plata (2do) -->
+          <div v-if="teamsSorted[1]" class="flex-1 flex items-end justify-center">
+            <div class="w-full max-w-[14rem] text-center">
+              <div
+                :class="[
+                  'rounded-2xl p-4 ring-1 ring-white/10 bg-white/5 transform translate-y-6 transition-transform duration-300',
+                  scaleClass(teamsSorted[1]),
+                ]"
+                :style="boxStyle(teamsSorted[1])"
+              >
+                <div class="text-sm text-slate-300">2º</div>
+                <div class="mt-2 font-semibold text-lg">{{ teamsSorted[1].name }}</div>
+                <div class="mt-3 text-2xl font-extrabold tabular-nums">
+                  {{ teamsSorted[1].score }}
+                </div>
+              </div>
+              <div
+                class="-mt-2 mx-auto w-10 h-10 rounded-b-md bg-slate-200/40 border border-white/10 flex items-center justify-center text-slate-800 font-bold text-sm"
+              >
+                ②
+              </div>
+            </div>
+          </div>
+
+          <!-- Oro (1ro) -->
+          <div v-if="teamsSorted[0]" class="flex-1 flex items-end justify-center">
+            <div class="w-full max-w-[18rem] text-center">
+              <div
+                :class="[
+                  'rounded-3xl p-5 ring-1 ring-white/10 bg-gradient-to-br from-yellow-400/20 to-amber-500/10 transition-transform duration-300',
+                  scaleClass(teamsSorted[0]),
+                ]"
+                :style="boxStyle(teamsSorted[0], 'large')"
+              >
+                <div class="text-sm text-amber-200">1º</div>
+                <div class="mt-2 font-extrabold text-2xl">{{ teamsSorted[0].name }}</div>
+                <div class="mt-3 text-4xl font-extrabold tabular-nums">
+                  {{ teamsSorted[0].score }}
+                </div>
+              </div>
+              <div
+                class="-mt-3 mx-auto w-14 h-14 rounded-b-md bg-amber-400/80 border border-white/20 flex items-center justify-center text-slate-900 font-black text-lg"
+              >
+                ★
+              </div>
+            </div>
+          </div>
+
+          <!-- Bronce (3ro) -->
+          <div v-if="teamsSorted[2]" class="flex-1 flex items-end justify-center">
+            <div class="w-full max-w-[14rem] text-center">
+              <div
+                :class="[
+                  'rounded-2xl p-4 ring-1 ring-white/10 bg-white/5 transform translate-y-6 transition-transform duration-300',
+                  scaleClass(teamsSorted[2]),
+                ]"
+                :style="boxStyle(teamsSorted[2])"
+              >
+                <div class="text-sm text-slate-300">3º</div>
+                <div class="mt-2 font-semibold text-lg">{{ teamsSorted[2].name }}</div>
+                <div class="mt-3 text-2xl font-extrabold tabular-nums">
+                  {{ teamsSorted[2].score }}
+                </div>
+              </div>
+              <div
+                class="-mt-2 mx-auto w-10 h-10 rounded-b-md bg-amber-700/30 border border-white/10 flex items-center justify-center text-slate-50 font-bold text-sm"
+              >
+                ③
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PUESTOS 4 Y 5 (si existen) como lista vertical, límite top5 -->
+        <div class="mt-4 space-y-3 max-w-xl mx-auto">
           <article
-            v-for="t in teamsSorted"
+            v-for="(t, idx) in teamsSorted.slice(3, 5)"
             :key="t.id"
-            class="rounded-2xl bg-white/10 ring-1 ring-white/10 p-4"
-            :style="{ boxShadow: `0 0 0 3px ${t.color ?? '#94a3b8'}20 inset` }"
+            class="rounded-lg bg-white/5 ring-1 ring-white/6 p-3 flex items-center justify-between transition-transform duration-300"
+            :class="{ 'scale-105': t.id === decisionTeamId }"
+            :style="
+              t.id === decisionTeamId
+                ? {
+                    boxShadow: `0 20px 40px -16px ${t.color ?? '#94a3b8'}88, 0 6px 18px -8px ${t.color ?? '#94a3b8'}55 inset`,
+                  }
+                : { boxShadow: `0 6px 18px -8px ${t.color ?? '#94a3b8'}55 inset` }
+            "
           >
-            <header class="flex items-center justify-between">
-              <h4 class="font-semibold text-lg">{{ t.name }}</h4>
-              <span class="text-xs text-slate-300">Equipo</span>
-            </header>
-            <div class="mt-3 text-3xl font-black tabular-nums">{{ t.score }}</div>
+            <div>
+              <div class="text-sm text-slate-300">#{{ idx + 4 }}</div>
+              <div class="font-semibold">{{ t.name }}</div>
+            </div>
+            <div class="text-2xl font-black tabular-nums">{{ t.score }}</div>
           </article>
         </div>
       </section>
@@ -289,42 +383,6 @@ const activeRing = computed(() => activeTeam.value?.color ?? '#60a5fa')
               <p class="text-xs text-slate-400">Puntos</p>
               <p class="text-2xl font-extrabold tabular-nums">{{ q?.points ?? 0 }}</p>
             </div>
-          </div>
-
-          <!-- Barra de progreso general (dentro de la tarjeta) -->
-          <div v-if="!game.isBuzzerTimerActive" class="mt-6">
-            <div
-              class="h-2 rounded bg-slate-800/60 overflow-hidden"
-              role="progressbar"
-              aria-label="Tiempo de pregunta"
-              :aria-valuenow="generalProgress"
-              aria-valuemin="0"
-              aria-valuemax="100"
-            >
-              <div
-                class="h-2 bg-sky-400 transition-[width] duration-200"
-                :style="{ width: generalProgress + '%' }"
-              ></div>
-            </div>
-            <div class="mt-1 text-[11px] text-slate-400">{{ generalProgress }}%</div>
-          </div>
-
-          <!-- Barra de progreso buzzer (si activo) -->
-          <div v-else class="mt-6">
-            <div
-              class="h-2 rounded bg-slate-800/60 overflow-hidden"
-              role="progressbar"
-              aria-label="Tiempo del equipo"
-              :aria-valuenow="buzzerProgress"
-              aria-valuemin="0"
-              aria-valuemax="100"
-            >
-              <div
-                class="h-2 bg-rose-400 transition-[width] duration-200"
-                :style="{ width: buzzerProgress + '%' }"
-              ></div>
-            </div>
-            <div class="mt-1 text-[11px] text-slate-400">{{ buzzerProgress }}%</div>
           </div>
         </div>
       </section>
