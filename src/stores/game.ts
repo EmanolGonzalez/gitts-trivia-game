@@ -354,6 +354,42 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  /** ---------------------
+   *  SAVE TO LOCALSTORAGE
+   * --------------------- */
+  function saveToLocalStorage(gameData?: GameData, qd?: QuestionsData) {
+    try {
+      if (qd) {
+        localStorage.setItem(LS_CATEGORIES, JSON.stringify(qd.categories ?? []))
+        localStorage.setItem(LS_QUESTIONS, JSON.stringify(qd.questions ?? []))
+      }
+      const settings = gameData?.settings
+        ? {
+            defaultTimeLimit: gameData.settings.defaultTimeLimit,
+            buzzerTimeLimit: gameData.settings.buzzerTimeLimit,
+            sampleSize: gameData.settings.sampleSize,
+            sampleRandomized: gameData.settings.sampleRandomized,
+          }
+        : {
+            defaultTimeLimit: defaultTimeLimit.value,
+            buzzerTimeLimit: buzzerTimeLimit.value,
+            sampleSize: sampleSize.value,
+            sampleRandomized: sampleRandomized.value,
+          }
+      localStorage.setItem(LS_SETTINGS, JSON.stringify(settings))
+    } catch (err) {
+      console.warn('saveToLocalStorage failed', err)
+    }
+  }
+
+  function saveQuestionsToLocalStorage(qd: QuestionsData) {
+    saveToLocalStorage(undefined, qd)
+  }
+
+  function saveSettingsToLocalStorage() {
+    saveToLocalStorage(undefined, { categories: [], questions: [] })
+  }
+
   async function loadFromPublicData() {
     const [qres, gres] = await Promise.all([
       fetch('/data/questions.json'),
@@ -848,6 +884,9 @@ export const useGameStore = defineStore('game', () => {
     // data
     ensureDataLoaded,
     loadFromPublicData,
+    saveToLocalStorage,
+    saveQuestionsToLocalStorage,
+    saveSettingsToLocalStorage,
 
     // display mode
     setDisplayMode,

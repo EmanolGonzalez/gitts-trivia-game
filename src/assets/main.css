@@ -23,14 +23,31 @@ body,
 
 body {
   margin: 0;
-  /* background image with a subtle dark overlay for better contrast */
-  background-image:
-    linear-gradient(var(--bg-overlay), var(--bg-overlay)), url('/circuit-board.jpg');
-  background-size: cover;
-  background-repeat: no-repeat;
-  background-attachment: fixed;
-  background-position: center center;
+  /* moved app background to .app-bg class so layout content can control background */
+  color: var(--text);
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.4;
 
+  /* Background applied to main app content area */
+  .app-bg {
+    min-height: 100%;
+    background-image:
+      linear-gradient(var(--bg-overlay), var(--bg-overlay)), url('/circuit-board.jpg');
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    background-position: center center;
+  }
   color: var(--text);
   font-family:
     Inter,

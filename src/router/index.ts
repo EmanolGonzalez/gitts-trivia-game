@@ -15,24 +15,14 @@ const router = createRouter({
       component: () => import('../views/Questions.vue'),
       meta: { layout: 'default' },
     },
-    {
-      path: '/waiting',
-      name: 'Waiting',
-      component: () => import('../views/Waiting.vue'),
-      meta: { layout: 'blank' },
-    },
+
     {
       path: '/groups',
       name: 'Groups',
       component: () => import('../views/Groups.vue'),
       meta: { layout: 'default' },
     },
-    {
-      path: '/results',
-      name: 'Results',
-      component: () => import('../views/Results.vue'),
-      meta: { layout: 'blank' },
-    },
+
     // 🎮 Rutas del Sistema de Trivia
     {
       path: '/control',

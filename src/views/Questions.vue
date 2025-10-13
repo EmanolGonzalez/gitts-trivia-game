@@ -68,10 +68,12 @@ onMounted(async () => {
   // Copias locales
   categories.value = game.categories.map((c) => ({ ...c }))
   questions.value = game.questions.map((q) => ({ ...q }))
+  // Persist to localStorage after loading initial data
+  game.saveQuestionsToLocalStorage({ categories: categories.value, questions: questions.value })
 })
 
 /* -----------------------------
-   DERIVADOS & FILTRO/ORDEN
+   DERIVADOS & FITROS/ORDEN
 ------------------------------ */
 const categoryMap = computed<Record<string, Category>>(() => {
   const map: Record<string, Category> = {}
@@ -89,6 +91,35 @@ const stats = computed(() => {
     totalQuestions: questions.value.length,
     totalCategories: categories.value.length,
     perCat,
+  }
+})
+
+// “dirty” = hay cambios locales sin publicar
+const isDirty = computed(() => {
+  try {
+    const A = JSON.stringify({
+      categories: categories.value.map((c) => ({ id: c.id, name: c.name, icon: c.icon })),
+      questions: questions.value.map((q) => ({
+        id: q.id,
+        categoryId: q.categoryId,
+        text: q.text,
+        answer: q.answer,
+        points: q.points,
+      })),
+    })
+    const B = JSON.stringify({
+      categories: game.categories.map((c) => ({ id: c.id, name: c.name, icon: c.icon })),
+      questions: game.questions.map((q) => ({
+        id: q.id,
+        categoryId: q.categoryId,
+        text: q.text,
+        answer: q.answer,
+        points: q.points,
+      })),
+    })
+    return A !== B
+  } catch {
+    return true
   }
 })
 
@@ -255,6 +286,8 @@ function saveEditor() {
       const idx = questions.value.findIndex((q) => q.id === payload.id)
       if (idx >= 0) questions.value[idx] = payload
     }
+    // persist to localStorage after edit
+    game.saveQuestionsToLocalStorage({ categories: categories.value, questions: questions.value })
   } else {
     const errs = validateCategory(cForm)
     if (errs.length) {
@@ -271,7 +304,7 @@ function saveEditor() {
     } else {
       const idx = categories.value.findIndex((c) => c.id === payload.id)
       if (idx >= 0) categories.value[idx] = payload
-      // Option: no renombrar categoryId de preguntas si cambia id (requerir manual)
+      // Nota: no renombrar categoryId de preguntas si cambia id (se requiere manual)
     }
   }
   showEditor.value = false
@@ -291,6 +324,7 @@ function askConfirm(message: string, onConfirm: () => void) {
 function removeQuestion(q: Question) {
   askConfirm(`¿Eliminar la pregunta "${q.text}"?`, () => {
     questions.value = questions.value.filter((x) => x.id !== q.id)
+    game.saveQuestionsToLocalStorage({ categories: categories.value, questions: questions.value })
   })
 }
 function removeCategory(c: Category) {
@@ -310,6 +344,10 @@ function removeCategory(c: Category) {
           q.categoryId === c.id ? { ...q, categoryId: 'uncategorized' } : q,
         )
         categories.value = categories.value.filter((x) => x.id !== c.id)
+        game.saveQuestionsToLocalStorage({
+          categories: categories.value,
+          questions: questions.value,
+        })
       },
     )
   } else {
@@ -340,6 +378,8 @@ function exportJson() {
   a.download = 'questions.json'
   a.click()
   URL.revokeObjectURL(url)
+  // save also to localStorage after export (keep latest)
+  game.saveQuestionsToLocalStorage(data)
 }
 
 const importInput = ref<HTMLInputElement | null>(null)
@@ -367,6 +407,8 @@ function importJsonChange(e: Event) {
         answer: q.answer,
         points: q.points,
       }))
+      // save imported to localStorage
+      game.saveQuestionsToLocalStorage({ categories: categories.value, questions: questions.value })
     } catch {
       alert('No se pudo leer el JSON.')
     } finally {
@@ -380,7 +422,6 @@ function importJsonChange(e: Event) {
    PUBLICAR AL JUEGO (Broadcast)
 ------------------------------ */
 function publishToGame() {
-  // Mantener equipos y settings actuales del store
   const gameData: GameData = {
     teams: game.teams.map((t) => ({ ...t })),
     settings: {
@@ -392,23 +433,22 @@ function publishToGame() {
     categories: categories.value.map((c) => ({ ...c })),
     questions: questions.value.map((q) => ({ ...q })),
   }
-  // Enviar LOAD_DATA para que todos (Display/Control) actualicen su banco
   game.sendMessage({ type: 'LOAD_DATA', game: gameData, questions: qd })
-  // Aplicar localmente en este cliente
-  // Nota: el store ya maneja LOAD_DATA en handleIncomingMessage
   alert('Banco de preguntas y categorías publicado al juego.')
+  // also persist locally so control retains changes
+  game.saveQuestionsToLocalStorage(qd)
 }
 
 /* -----------------------------
    LIMPIEZA DE DATOS / UTILIDADES
 ------------------------------ */
 function normalizeText() {
-  // P. ej. trim y capitalización rápida del primer carácter de preguntas y respuestas
   questions.value = questions.value.map((q) => ({
     ...q,
     text: q.text.trim().replace(/\s+/g, ' '),
     answer: q.answer.trim().replace(/\s+/g, ' '),
   }))
+  game.saveQuestionsToLocalStorage({ categories: categories.value, questions: questions.value })
 }
 function fixMissingCategoryRefs() {
   const validIds = new Set(categories.value.map((c) => c.id))
@@ -420,6 +460,7 @@ function fixMissingCategoryRefs() {
   questions.value = questions.value.map((q) =>
     validIds.has(q.categoryId) ? q : { ...q, categoryId: 'uncategorized' },
   )
+  game.saveQuestionsToLocalStorage({ categories: categories.value, questions: questions.value })
 }
 function reindexQuestionIds() {
   const sorted = [...questions.value].sort((a, b) => a.text.localeCompare(b.text))
@@ -430,200 +471,241 @@ function reindexQuestionIds() {
     i++
   }
   questions.value = next
+  game.saveQuestionsToLocalStorage({ categories: categories.value, questions: questions.value })
 }
 </script>
 
 <template>
   <div class="mx-auto max-w-7xl px-4 py-6">
-    <!-- Header -->
-    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-      <div>
-        <h1 class="text-2xl font-bold tracking-tight">Gestor de Preguntas & Categorías</h1>
-        <p class="text-sm text-muted-foreground/80">
-          Administra el banco del juego. Importa, edita y publica cambios al runtime con un clic.
-        </p>
+    <!-- HEADER sticky -->
+    <div
+      class="sticky top-0 z-30 -mx-4 px-4 py-3 mb-4 bg-slate-900/95 backdrop-blur border-b border-slate-800"
+    >
+      <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 class="text-2xl font-bold tracking-tight">Gestor de Preguntas & Categorías</h1>
+          <p class="text-sm text-slate-400">
+            Importa, edita y publica cambios al runtime con un clic.
+            <span v-if="isDirty" class="ml-2 inline-flex items-center gap-1 text-amber-300">
+              ● Cambios sin publicar
+            </span>
+          </p>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button
+            @click="exportJson"
+            class="btn btn-sm bg-slate-800 hover:bg-slate-700 text-white rounded-xl px-4 py-2"
+          >
+            Exportar JSON
+          </button>
+          <button
+            @click="importJsonClick"
+            class="btn btn-sm bg-slate-100 hover:bg-slate-200 text-slate-900 rounded-xl px-4 py-2"
+          >
+            Importar JSON
+          </button>
+          <input
+            ref="importInput"
+            type="file"
+            accept="application/json"
+            class="hidden"
+            @change="importJsonChange"
+          />
+          <button
+            @click="publishToGame"
+            :disabled="categories.length === 0 || questions.length === 0"
+            class="btn btn-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl px-4 py-2"
+          >
+            Publicar al juego
+          </button>
+        </div>
       </div>
 
-      <div class="flex items-center gap-2">
+      <!-- Tabs -->
+      <div class="mt-3 flex items-center gap-2">
         <button
-          @click="exportJson"
-          class="btn btn-sm bg-slate-800 hover:bg-slate-700 text-white rounded-xl px-4 py-2"
+          class="rounded-xl px-4 py-2 text-sm border"
+          :class="
+            viewTab === 'questions'
+              ? 'bg-blue-600 text-white border-blue-500'
+              : 'bg-slate-800 border-slate-700 hover:bg-slate-700'
+          "
+          @click="viewTab = 'questions'"
         >
-          Exportar JSON
+          Preguntas
         </button>
         <button
-          @click="importJsonClick"
-          class="btn btn-sm bg-slate-100 hover:bg-slate-200 text-slate-900 rounded-xl px-4 py-2"
+          class="rounded-xl px-4 py-2 text-sm border"
+          :class="
+            viewTab === 'categories'
+              ? 'bg-blue-600 text-white border-blue-500'
+              : 'bg-slate-800 border-slate-700 hover:bg-slate-700'
+          "
+          @click="viewTab = 'categories'"
         >
-          Importar JSON
+          Categorías
         </button>
-        <input
-          ref="importInput"
-          type="file"
-          accept="application/json"
-          class="hidden"
-          @change="importJsonChange"
-        />
-        <button
-          @click="publishToGame"
-          class="btn btn-sm bg-blue-600 hover:bg-blue-500 text-white rounded-xl px-4 py-2"
-        >
-          Publicar al juego
-        </button>
+
+        <!-- Filtros preguntas -->
+        <div class="ml-auto flex flex-wrap items-center gap-2" v-if="viewTab === 'questions'">
+          <div class="relative">
+            <input
+              v-model="search"
+              type="text"
+              placeholder="Buscar texto, respuesta o categoría…"
+              class="w-64 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <span class="absolute right-2 top-2 text-xs text-slate-400">{{
+              filteredQuestions.length
+            }}</span>
+          </div>
+          <select
+            v-model="selectedCategory"
+            class="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm"
+          >
+            <option value="all">Todas las categorías</option>
+            <option v-for="c in categories" :key="c.id" :value="c.id">
+              {{ c.name }}
+            </option>
+          </select>
+          <select
+            v-model="pointsFilter"
+            class="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm"
+          >
+            <option value="all">Todos los puntajes</option>
+            <option :value="100">100 pts</option>
+            <option :value="150">150 pts</option>
+            <option :value="200">200 pts</option>
+          </select>
+          <select
+            v-model="sortBy"
+            class="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm"
+          >
+            <option value="default">Orden por ID</option>
+            <option value="category">Categoría</option>
+            <option value="points">Puntos</option>
+            <option value="text">Texto</option>
+          </select>
+          <button
+            @click="openQuestionCreate"
+            class="btn bg-green-600 hover:bg-green-500 text-white rounded-xl px-4 py-2 text-sm"
+          >
+            Nueva pregunta
+          </button>
+        </div>
+
+        <!-- Acciones categorías -->
+        <div class="ml-auto flex items-center gap-2" v-else>
+          <button
+            @click="openCategoryCreate"
+            class="btn bg-green-600 hover:bg-green-500 text-white rounded-xl px-4 py-2 text-sm"
+          >
+            Nueva categoría
+          </button>
+          <button
+            @click="normalizeText"
+            class="btn bg-slate-800 hover:bg-slate-700 text-white rounded-xl px-4 py-2 text-sm"
+          >
+            Normalizar textos
+          </button>
+          <button
+            @click="fixMissingCategoryRefs"
+            class="btn bg-slate-800 hover:bg-slate-700 text-white rounded-xl px-4 py-2 text-sm"
+          >
+            Arreglar referencias
+          </button>
+          <button
+            @click="reindexQuestionIds"
+            class="btn bg-slate-800 hover:bg-slate-700 text-white rounded-xl px-4 py-2 text-sm"
+          >
+            Reindexar IDs
+          </button>
+        </div>
       </div>
     </div>
 
-    <!-- Stats -->
-    <div class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-      <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
-        <div class="text-xs uppercase opacity-70">Preguntas</div>
+    <!-- Stats (tarjetas sólidas) -->
+    <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div class="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+        <div class="text-xs uppercase text-slate-400">Preguntas</div>
         <div class="text-2xl font-semibold">{{ stats.totalQuestions }}</div>
       </div>
-      <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
-        <div class="text-xs uppercase opacity-70">Categorías</div>
+      <div class="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+        <div class="text-xs uppercase text-slate-400">Categorías</div>
         <div class="text-2xl font-semibold">{{ stats.totalCategories }}</div>
       </div>
-      <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
-        <div class="text-xs uppercase opacity-70">Tiempo de buzzer</div>
+      <div class="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+        <div class="text-xs uppercase text-slate-400">Tiempo buzzer</div>
         <div class="text-2xl font-semibold">{{ game.buzzerTimeLimit }}s</div>
       </div>
-    </div>
-
-    <!-- Tabs -->
-    <div class="mt-6 flex items-center gap-2">
-      <button
-        class="rounded-xl px-4 py-2 text-sm"
-        :class="viewTab === 'questions' ? 'bg-blue-600 text-white' : 'bg-white/5 hover:bg-white/10'"
-        @click="viewTab = 'questions'"
-      >
-        Preguntas
-      </button>
-      <button
-        class="rounded-xl px-4 py-2 text-sm"
-        :class="
-          viewTab === 'categories' ? 'bg-blue-600 text-white' : 'bg-white/5 hover:bg-white/10'
-        "
-        @click="viewTab = 'categories'"
-      >
-        Categorías
-      </button>
-
-      <div class="ml-auto flex items-center gap-2" v-if="viewTab === 'questions'">
-        <input
-          v-model="search"
-          type="text"
-          placeholder="Buscar por texto, respuesta o categoría…"
-          class="w-64 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <select
-          v-model="selectedCategory"
-          class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm"
-        >
-          <option value="all">Todas las categorías</option>
-          <option v-for="c in categories" :key="c.id" :value="c.id">
-            {{ c.name }}
-          </option>
-        </select>
-        <select
-          v-model="pointsFilter"
-          class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm"
-        >
-          <option value="all">Todos los puntajes</option>
-          <option :value="100">100 pts</option>
-          <option :value="150">150 pts</option>
-          <option :value="200">200 pts</option>
-        </select>
-        <select
-          v-model="sortBy"
-          class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm"
-        >
-          <option value="default">Orden por ID</option>
-          <option value="category">Categoría</option>
-          <option value="points">Puntos</option>
-          <option value="text">Texto</option>
-        </select>
-        <button
-          @click="openQuestionCreate"
-          class="btn bg-green-600 hover:bg-green-500 text-white rounded-xl px-4 py-2 text-sm"
-        >
-          Nueva pregunta
-        </button>
-      </div>
-
-      <div class="ml-auto flex items-center gap-2" v-else>
-        <button
-          @click="openCategoryCreate"
-          class="btn bg-green-600 hover:bg-green-500 text-white rounded-xl px-4 py-2 text-sm"
-        >
-          Nueva categoría
-        </button>
-        <button
-          @click="normalizeText"
-          class="btn bg-white/5 hover:bg-white/10 rounded-xl px-4 py-2 text-sm"
-        >
-          Normalizar textos
-        </button>
-        <button
-          @click="fixMissingCategoryRefs"
-          class="btn bg-white/5 hover:bg-white/10 rounded-xl px-4 py-2 text-sm"
-        >
-          Arreglar referencias
-        </button>
-        <button
-          @click="reindexQuestionIds"
-          class="btn bg-white/5 hover:bg-white/10 rounded-xl px-4 py-2 text-sm"
-        >
-          Reindexar IDs
-        </button>
+      <div class="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+        <div class="text-xs uppercase text-slate-400">Muestra</div>
+        <div class="text-2xl font-semibold">{{ game.sampleSize }}</div>
       </div>
     </div>
 
     <!-- Tabla de preguntas -->
     <div
       v-if="viewTab === 'questions'"
-      class="mt-4 overflow-hidden rounded-2xl border border-white/10"
+      class="mt-4 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900"
     >
       <table class="min-w-full border-collapse">
-        <thead class="bg-white/5 text-left text-sm">
+        <thead class="bg-slate-800/80 text-left text-sm">
           <tr>
-            <th class="px-4 py-3">ID</th>
+            <th class="px-4 py-3 w-24">ID</th>
             <th class="px-4 py-3">Texto</th>
             <th class="px-4 py-3">Respuesta</th>
             <th class="px-4 py-3">Categoría</th>
-            <th class="px-4 py-3">Puntos</th>
-            <th class="px-4 py-3"></th>
+            <th class="px-4 py-3 w-24">Puntos</th>
+            <th class="px-4 py-3 w-40"></th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-white/10">
-          <tr v-for="q in filteredQuestions" :key="q.id" class="hover:bg-white/5">
+        <tbody class="divide-y divide-slate-800">
+          <tr v-for="q in filteredQuestions" :key="q.id" class="hover:bg-slate-800/50">
             <td class="px-4 py-3 text-xs font-mono text-slate-300">{{ q.id }}</td>
             <td class="px-4 py-3">{{ q.text }}</td>
             <td class="px-4 py-3 text-slate-300">{{ q.answer }}</td>
             <td class="px-4 py-3">
-              <span class="rounded-lg bg-white/10 px-2 py-1 text-xs">
+              <span
+                class="inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-xs"
+                :style="{
+                  borderColor: (categoryMap[q.categoryId]?.color ?? '#94a3b8') + '55',
+                  backgroundColor: (categoryMap[q.categoryId]?.color ?? '#94a3b8') + '14',
+                }"
+              >
+                <span
+                  class="inline-block h-2 w-2 rounded-full"
+                  :style="{ backgroundColor: categoryMap[q.categoryId]?.color ?? '#94a3b8' }"
+                />
                 {{ categoryMap[q.categoryId]?.name ?? q.categoryId }}
               </span>
             </td>
-            <td class="px-4 py-3 font-semibold">{{ q.points }}</td>
+            <td class="px-4 py-3 font-semibold tabular-nums">{{ q.points }}</td>
             <td class="px-4 py-3">
               <div class="flex items-center gap-2">
                 <button
-                  class="rounded-lg bg-white/5 px-3 py-1 text-sm hover:bg-white/10"
+                  class="rounded-lg bg-slate-800 px-3 py-1 text-sm hover:bg-slate-700"
                   @click="openQuestionEdit(q)"
+                  title="Editar"
                 >
                   Editar
                 </button>
                 <button
-                  class="rounded-lg bg-red-600/90 px-3 py-1 text-sm text-white hover:bg-red-600"
+                  class="rounded-lg bg-rose-600 px-3 py-1 text-sm text-white hover:bg-rose-500"
                   @click="removeQuestion(q)"
+                  title="Eliminar"
                 >
                   Eliminar
                 </button>
               </div>
             </td>
           </tr>
+
           <tr v-if="filteredQuestions.length === 0">
-            <td colspan="6" class="px-4 py-6 text-center text-sm opacity-70">Sin resultados.</td>
+            <td colspan="6" class="px-4 py-10 text-center text-sm text-slate-400">
+              Sin resultados. Ajusta filtros o crea una nueva pregunta.
+            </td>
           </tr>
         </tbody>
       </table>
@@ -634,58 +716,60 @@ function reindexQuestionIds() {
       <div
         v-for="c in categories"
         :key="c.id"
-        class="rounded-2xl border border-white/10 bg-white/5 p-4 hover:border-white/20"
+        class="rounded-2xl border border-slate-800 bg-slate-900 p-4 hover:border-slate-700"
+        :style="{ boxShadow: `0 0 0 3px ${c.color ?? '#94a3b8'}18 inset` }"
       >
         <div class="flex items-start justify-between">
           <div>
-            <div class="text-xs uppercase tracking-wide opacity-70">{{ c.id }}</div>
+            <div class="text-xs uppercase tracking-wide text-slate-400">{{ c.id }}</div>
             <div class="mt-1 text-lg font-semibold">{{ c.name }}</div>
-            <div class="text-xs opacity-70">Icono: {{ c.icon || '—' }}</div>
+            <div class="text-xs text-slate-400">Icono: {{ c.icon || '—' }}</div>
           </div>
           <div class="text-right">
-            <div class="text-2xl font-bold">{{ stats.perCat[c.id] ?? 0 }}</div>
-            <div class="text-xs opacity-70">preguntas</div>
+            <div class="text-2xl font-bold tabular-nums">{{ stats.perCat[c.id] ?? 0 }}</div>
+            <div class="text-xs text-slate-400">preguntas</div>
           </div>
         </div>
         <div class="mt-3 flex gap-2">
           <button
-            class="rounded-lg bg-white/5 px-3 py-1 text-sm hover:bg-white/10"
+            class="rounded-lg bg-slate-800 px-3 py-1 text-sm hover:bg-slate-700"
             @click="openCategoryEdit(c)"
           >
             Editar
           </button>
           <button
-            class="rounded-lg bg-red-600/90 px-3 py-1 text-sm text-white hover:bg-red-600"
+            class="rounded-lg bg-rose-600 px-3 py-1 text-sm text-white hover:bg-rose-500"
             @click="removeCategory(c)"
           >
             Eliminar
           </button>
         </div>
       </div>
+
       <div
         v-if="categories.length === 0"
-        class="col-span-full rounded-2xl border border-white/10 bg-white/5 p-8 text-center"
+        class="col-span-full rounded-2xl border border-slate-800 bg-slate-900 p-8 text-center"
       >
-        <div class="text-sm opacity-70">No hay categorías. Crea la primera.</div>
+        <div class="text-sm text-slate-400">No hay categorías. Crea la primera.</div>
       </div>
     </div>
 
     <!-- Drawer / Modal Editor -->
     <div
       v-if="showEditor"
-      class="fixed inset-0 z-50 flex items-end md:items-center md:justify-center bg-black/50 backdrop-blur-sm"
+      class="fixed inset-0 z-50 flex items-end md:items-center md:justify-center bg-black/60 backdrop-blur-sm"
       @click.self="showEditor = false"
     >
       <div
-        class="w-full md:max-w-2xl rounded-t-2xl md:rounded-2xl bg-slate-900 border border-white/10 shadow-xl"
+        class="w-full md:max-w-2xl rounded-t-2xl md:rounded-2xl bg-slate-900 border border-slate-800 shadow-xl"
       >
-        <div class="flex items-center justify-between border-b border-white/10 px-4 py-3">
+        <div class="flex items-center justify-between border-b border-slate-800 px-4 py-3">
           <div class="text-lg font-semibold">
             {{ editorMode === 'create' ? 'Crear' : 'Editar' }}
             {{ editorType === 'question' ? 'pregunta' : 'categoría' }}
           </div>
           <button
-            class="rounded-lg px-3 py-1 text-sm hover:bg-white/10"
+            class="rounded-lg px-3 py-1 text-sm hover:bg-slate-800"
             @click="showEditor = false"
           >
             Cerrar
@@ -696,7 +780,7 @@ function reindexQuestionIds() {
           <!-- Errores -->
           <div
             v-if="formErrors.length"
-            class="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200"
+            class="mb-3 rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-rose-200"
           >
             <ul class="list-disc pl-5">
               <li v-for="e in formErrors" :key="e">{{ e }}</li>
@@ -706,44 +790,44 @@ function reindexQuestionIds() {
           <!-- Form Pregunta -->
           <div v-if="editorType === 'question'" class="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div class="md:col-span-1">
-              <label class="mb-1 block text-sm opacity-80">ID</label>
+              <label class="mb-1 block text-sm text-slate-300">ID</label>
               <input
                 v-model="qForm.id"
                 type="text"
-                class="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div class="md:col-span-1">
-              <label class="mb-1 block text-sm opacity-80">Puntos</label>
+              <label class="mb-1 block text-sm text-slate-300">Puntos</label>
               <input
                 v-model.number="qForm.points"
                 type="number"
                 min="50"
                 step="50"
-                class="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div class="md:col-span-2">
-              <label class="mb-1 block text-sm opacity-80">Texto</label>
+              <label class="mb-1 block text-sm text-slate-300">Texto</label>
               <textarea
                 v-model="qForm.text"
                 rows="2"
-                class="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
               ></textarea>
             </div>
             <div class="md:col-span-2">
-              <label class="mb-1 block text-sm opacity-80">Respuesta</label>
+              <label class="mb-1 block text-sm text-slate-300">Respuesta</label>
               <textarea
                 v-model="qForm.answer"
                 rows="2"
-                class="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
               ></textarea>
             </div>
             <div class="md:col-span-2">
-              <label class="mb-1 block text-sm opacity-80">Categoría</label>
+              <label class="mb-1 block text-sm text-slate-300">Categoría</label>
               <select
                 v-model="qForm.categoryId"
-                class="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option disabled value="">Selecciona una categoría</option>
                 <option v-for="c in categories" :key="c.id" :value="c.id">
@@ -756,36 +840,36 @@ function reindexQuestionIds() {
           <!-- Form Categoría -->
           <div v-else class="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div class="md:col-span-1">
-              <label class="mb-1 block text-sm opacity-80">ID</label>
+              <label class="mb-1 block text-sm text-slate-300">ID</label>
               <input
                 v-model="cForm.id"
                 type="text"
-                class="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div class="md:col-span-1">
-              <label class="mb-1 block text-sm opacity-80">Icono</label>
+              <label class="mb-1 block text-sm text-slate-300">Icono</label>
               <select
                 v-model="cForm.icon"
-                class="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option v-for="i in iconOptions" :key="i" :value="i">{{ i }}</option>
               </select>
             </div>
             <div class="md:col-span-2">
-              <label class="mb-1 block text-sm opacity-80">Nombre</label>
+              <label class="mb-1 block text-sm text-slate-300">Nombre</label>
               <input
                 v-model="cForm.name"
                 type="text"
-                class="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
         </div>
 
-        <div class="flex items-center justify-end gap-2 border-t border-white/10 px-4 py-3">
+        <div class="flex items-center justify-end gap-2 border-t border-slate-800 px-4 py-3">
           <button
-            class="rounded-xl px-4 py-2 text-sm hover:bg-white/10"
+            class="rounded-xl px-4 py-2 text-sm hover:bg-slate-800"
             @click="showEditor = false"
           >
             Cancelar
@@ -803,20 +887,20 @@ function reindexQuestionIds() {
     <!-- Confirm Dialog -->
     <div
       v-if="confirmDialog.open"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
     >
-      <div class="w-full max-w-md rounded-2xl border border-white/10 bg-slate-900 p-4">
+      <div class="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-4">
         <div class="text-lg font-semibold">Confirmar acción</div>
-        <p class="mt-2 text-sm opacity-80">{{ confirmDialog.message }}</p>
+        <p class="mt-2 text-sm text-slate-300">{{ confirmDialog.message }}</p>
         <div class="mt-4 flex items-center justify-end gap-2">
           <button
-            class="rounded-xl px-4 py-2 text-sm hover:bg-white/10"
+            class="rounded-xl px-4 py-2 text-sm hover:bg-slate-800"
             @click="confirmDialog.open = false"
           >
             Cancelar
           </button>
           <button
-            class="rounded-xl bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-500"
+            class="rounded-xl bg-rose-600 px-4 py-2 text-sm text-white hover:bg-rose-500"
             @click="confirmDialog.onConfirm"
           >
             Confirmar
@@ -831,8 +915,5 @@ function reindexQuestionIds() {
 @reference "@/assets/main.css";
 .btn {
   @apply rounded-xl px-3 py-2 text-sm transition;
-}
-.text-muted-foreground {
-  color: #9aa4b2;
 }
 </style>
