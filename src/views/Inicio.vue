@@ -9,7 +9,7 @@ function goControl() {
   router.push({ path: '/control' })
 }
 function goDisplay() {
-  router.push({ path: '/display' })
+  window.open('/display', '_blank')
 }
 </script>
 
