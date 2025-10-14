@@ -23,6 +23,9 @@ importers:
       vue-router:
         specifier: ^4.5.1
         version: 4.5.1(vue@3.5.22(typescript@5.9.3))
+      vue3-roulette:
+        specifier: ^0.3.3
+        version: 0.3.3(vue@3.5.22(typescript@5.9.3))
     devDependencies:
       '@tsconfig/node22':
         specifier: ^22.0.2
@@ -2463,6 +2466,11 @@ packages:
     peerDependencies:
       typescript: '>=5.0.0'
 
+  vue3-roulette@0.3.3:
+    resolution: {integrity: sha512-DYbxyZDSH26dK2+OD2l3zHfxHz4aAzP9Uiz+aNtmWTngLNJaU9fLzvbsQUTKpenKJ6nPCiRZDJH5fkE2dSwpUA==}
+    peerDependencies:
+      vue: ^3.2.11
+
   vue@3.5.22:
     resolution: {integrity: sha512-toaZjQ3a/G/mYaLSbV+QsQhIdMo9x5rrqIpYRObsJ6T/J+RyCSFwN2LHNVH9v8uIcljDNa3QzPVdv3Y6b9hAJQ==}
     peerDependencies:
@@ -4850,6 +4858,10 @@ snapshots:
       '@volar/typescript': 2.4.23
       '@vue/language-core': 3.1.1(typescript@5.9.3)
       typescript: 5.9.3
+
+  vue3-roulette@0.3.3(vue@3.5.22(typescript@5.9.3)):
+    dependencies:
+      vue: 3.5.22(typescript@5.9.3)
 
   vue@3.5.22(typescript@5.9.3):
     dependencies:

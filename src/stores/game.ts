@@ -12,6 +12,7 @@ import type {
   DisplayMode,
   StateSnapshotMessage,
 } from '@/types/game'
+import { fetchUsedQuestions, saveUsedQuestions } from '@/utils/questionTracker'
 
 // Claves para LocalStorage
 const LS_CATEGORIES = 'trivia.categories'
@@ -510,36 +511,28 @@ export const useGameStore = defineStore('game', () => {
    *  AUTO-LOAD DE DATOS
    * --------------------- */
   async function ensureDataLoaded() {
-    // Prefer full local data (categories+questions+settings)
-    const local = loadFromLocalStorage()
-    if (local) {
-      applyLoadedData(local.game, local.questions)
-      sendMessage({ type: 'LOAD_DATA', game: local.game, questions: local.questions })
-      sendStateSnapshot()
-      return
-    }
+    const usedQuestions = await fetchUsedQuestions()
+    const [qres, gres] = await Promise.all([
+      fetch('/data/questions.json'),
+      fetch('/data/game-state.json'),
+    ])
+    const questionsData = (await qres.json()) as QuestionsData
+    const gameData = (await gres.json()) as GameData
 
-    // If we don't have full data, try to at least restore teams/settings
-    const settingsOnly = loadSettingsFromLocalStorage()
-    if (settingsOnly) {
-      // apply teams and settings without overwriting categories/questions yet
-      teams.value = (settingsOnly.teams ?? []).map((t) => ({ ...t, score: t.score ?? 0 }))
-      if (settingsOnly.settings?.defaultTimeLimit != null)
-        defaultTimeLimit.value = settingsOnly.settings.defaultTimeLimit
-      if (settingsOnly.settings?.buzzerTimeLimit != null)
-        buzzerTimeLimit.value = settingsOnly.settings.buzzerTimeLimit
-      if (settingsOnly.settings?.sampleSize != null)
-        sampleSize.value = settingsOnly.settings.sampleSize
-      if (settingsOnly.settings?.sampleRandomized != null)
-        sampleRandomized.value = settingsOnly.settings.sampleRandomized
-      // take a snapshot to broadcast current teams/settings
-      sendStateSnapshot()
-    }
+    // Exclude used questions
+    questionsData.questions = questionsData.questions.filter(
+      (q) => !usedQuestions.includes(q.id),
+    )
 
-    // Finally ensure we have questions/categories by loading public data only if missing
-    if (questions.value.length === 0 || categories.value.length === 0) {
-      await loadFromPublicData()
-    }
+    applyLoadedData(gameData, questionsData)
+    sendMessage({ type: 'LOAD_DATA', game: gameData, questions: questionsData })
+    sendStateSnapshot()
+  }
+
+  function finalizeGame() {
+    const usedQuestions = questionDeck.value
+    saveUsedQuestions(usedQuestions)
+    resetGame()
   }
 
   function loadSettingsFromLocalStorage(): {
@@ -1287,5 +1280,7 @@ export const useGameStore = defineStore('game', () => {
     sendMessage,
     // audio
     initAudio,
+    finalizeGame,
+    nextQuestionByCategory,
   }
 })

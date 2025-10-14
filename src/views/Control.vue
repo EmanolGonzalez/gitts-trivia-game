@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, computed, ref } from 'vue'
 import { useGameStore } from '@/stores/game'
+import CategoryRoulette from '@/components/CategoryRoulette.vue'
 
 const game = useGameStore()
 
@@ -91,7 +92,12 @@ function start() {
 }
 
 function next() {
+  if (!showRoulette.value) {
+    showRoulette.value = true
+    return
+  }
   game.nextQuestion()
+  showRoulette.value = false
 }
 
 function showAnswer() {
@@ -169,6 +175,25 @@ const buzzerProgress = computed(() => {
   const remain = Math.max(0, game.buzzerTimeRemaining)
   return Math.min(100, Math.round((remain / total) * 100))
 })
+
+const showRoulette = ref(false)
+
+function nextQuestionByCategory(category: { id: string; label: string }) {
+  console.log('Avanzando a la siguiente pregunta en la categoría:', category);
+  // Aquí puedes implementar la lógica para seleccionar la siguiente pregunta basada en la categoría
+  const nextQuestion = game.questions.find((q: { categoryId: string }) => q.categoryId === category.id);
+  if (nextQuestion) {
+    game.setCurrentQuestion(nextQuestion);
+  } else {
+    console.warn('No se encontró una pregunta para la categoría seleccionada:', category);
+  }
+}
+
+function onCategorySelected(category: { id: string; label: string }) {
+  console.log('Categoría seleccionada:', category);
+  nextQuestionByCategory(category);
+  showRoulette.value = false;
+}
 </script>
 
 <template>
@@ -615,5 +640,8 @@ const buzzerProgress = computed(() => {
         </div>
       </div>
     </div>
+
+    <!-- Componente de ruleta de categorías -->
+    <CategoryRoulette v-if="showRoulette" @spin-end="onCategorySelected" />
   </div>
 </template>
