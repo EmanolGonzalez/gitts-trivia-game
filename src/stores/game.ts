@@ -25,7 +25,8 @@ import type {
   DisableTeamForQuestionMessage,
   SetDisplayModeMessage,
 } from '@/types/game'
-import { saveUsedQuestions } from '@/utils/questionTracker'
+import { saveUsedQuestions, fetchUsedQuestions } from '@/utils/questionTracker'
+
 const LS_CATEGORIES = 'trivia.categories'
 const LS_QUESTIONS = 'trivia.questions'
 const LS_SETTINGS = 'trivia.settings'
@@ -600,14 +601,35 @@ export const useGameStore = defineStore('game', () => {
   /** ---------------------
    *  DECK DE PREGUNTAS
    * --------------------- */
-  function buildQuestionDeck() {
+async function buildQuestionDeck() {
+  // Cargar preguntas ya usadas
+  const usedIds = await fetchUsedQuestions()
+  
+  // Filtrar preguntas disponibles (que NO estén usadas)
+  const availableQuestions = questions.value.filter(q => !usedIds.includes(q.id))
+  
+  // Si no quedan suficientes preguntas, limpiar el historial y usar todas
+  if (availableQuestions.length < Math.min(5, questions.value.length)) {
+    console.log('🔄 Pocas preguntas disponibles, reiniciando el pool...')
+    localStorage.removeItem('usedQuestions')
+    // Usar todas las preguntas
     const ids = questions.value.map((q) => q.id)
     const N = Math.max(1, Math.min(sampleSize.value, ids.length))
     const final = sampleRandomized.value ? shuffle(ids).slice(0, N) : ids.slice(0, N)
     questionDeck.value = final
     deckIndex.value = -1
+    return
   }
-
+  
+  // Construir deck solo con preguntas disponibles
+  const ids = availableQuestions.map((q) => q.id)
+  const N = Math.max(1, Math.min(sampleSize.value, ids.length))
+  const final = sampleRandomized.value ? shuffle(ids).slice(0, N) : ids.slice(0, N)
+  questionDeck.value = final
+  deckIndex.value = -1
+  
+  console.log(`✅ Deck construido: ${final.length} preguntas (${usedIds.length} ya usadas)`)
+}
   function shuffle<T>(array: T[]): T[] {
     const a = [...array]
     for (let i = a.length - 1; i > 0; i--) {
@@ -622,18 +644,22 @@ export const useGameStore = defineStore('game', () => {
   /** ---------------------
    *  FLUJO DE CONTROL
    * --------------------- */
-  function startGame() {
-    if (questions.value.length === 0) return
-    // Initialize audio on user gesture (Start game) so browsers allow playback
-    try {
-      initAudio()
-    } catch {}
-    buildQuestionDeck()
-    status.value = 'question'
-    displayMode.value = 'question'
-    sendMessage({ type: 'START_GAME' })
-    nextQuestion()
-  }
+async function startGame() {
+  if (questions.value.length === 0) return
+  
+  // Initialize audio on user gesture
+  try {
+    initAudio()
+  } catch {}
+  
+  // Construir deck filtrando preguntas usadas
+  await buildQuestionDeck()
+  
+  status.value = 'question'
+  displayMode.value = 'question'
+  sendMessage({ type: 'START_GAME' })
+  nextQuestion()
+}
 
   function selectQuestion(questionId: string) {
     // cancel any pending auto-next
@@ -659,37 +685,47 @@ export const useGameStore = defineStore('game', () => {
     sendStateSnapshot()
   }
 
-  function nextQuestion() {
-    // cancel pending auto-next to avoid double-advance
-    if (autoNextTimeout) {
-      clearTimeout(autoNextTimeout)
-      autoNextTimeout = null
-    }
-    if (questionDeck.value.length === 0) buildQuestionDeck()
-    const nextIdx = deckIndex.value + 1
-    if (nextIdx >= questionDeck.value.length) {
-      status.value = 'finished'
-      displayMode.value = 'scoreboard'
-      // stop all audio when the game finishes
-      try {
-        stopAllAudio()
-      } catch {}
-      sendMessage({ type: 'NEXT_QUESTION' })
-      sendStateSnapshot()
-      return
-    }
-    deckIndex.value = nextIdx
-    const nextId = questionDeck.value[deckIndex.value]
-    if (!nextId) {
-      status.value = 'finished'
-      displayMode.value = 'scoreboard'
-      sendMessage({ type: 'NEXT_QUESTION' })
-      sendStateSnapshot()
-      return
-    }
-    selectQuestion(nextId)
-    sendMessage({ type: 'NEXT_QUESTION' })
+function nextQuestion() {
+  // cancel pending auto-next to avoid double-advance
+  if (autoNextTimeout) {
+    clearTimeout(autoNextTimeout)
+    autoNextTimeout = null
   }
+  
+  // Guardar la pregunta actual como usada ANTES de avanzar
+  if (currentQuestionId.value) {
+    saveUsedQuestions([currentQuestionId.value]).catch(err => {
+      console.warn('Error guardando pregunta usada:', err)
+    })
+  }
+  
+  if (questionDeck.value.length === 0) buildQuestionDeck()
+  const nextIdx = deckIndex.value + 1
+  
+  if (nextIdx >= questionDeck.value.length) {
+    // 🎯 JUEGO TERMINADO - Mostrar scoreboard
+    status.value = 'finished'
+    displayMode.value = 'scoreboard'
+    try {
+      stopAllAudio()
+    } catch {}
+    sendMessage({ type: 'NEXT_QUESTION' })
+    sendStateSnapshot()
+    return
+  }
+  
+  deckIndex.value = nextIdx
+  const nextId = questionDeck.value[deckIndex.value]
+  if (!nextId) {
+    status.value = 'finished'
+    displayMode.value = 'scoreboard'
+    sendMessage({ type: 'NEXT_QUESTION' })
+    sendStateSnapshot()
+    return
+  }
+  selectQuestion(nextId)
+  sendMessage({ type: 'NEXT_QUESTION' })
+}
 
   function teamBuzzed(teamId: string) {
     if (hasAnyTeamBuzzed.value || disabledTeamsForQuestion.value.includes(teamId)) return
@@ -766,16 +802,32 @@ export const useGameStore = defineStore('game', () => {
     sendMessage({ type: 'MARK_INCORRECT', teamId })
     sendStateSnapshot()
   }
-
-  function hardResetGame() {
-    resetGame()
-    teams.value = teams.value.map((t) => ({ ...t, score: 0 }))
-    sendMessage({ type: 'RESET_GAME' })
-    sendStateSnapshot()
-    try {
-      stopAllAudio()
-    } catch {}
-  }
+// 5. MODIFICAR hardResetGame() para limpiar preguntas usadas si se solicita
+function hardResetGame() {
+  // Limpiar scores
+  teams.value.forEach((t) => (t.score = 0))
+  
+  // Resetear estado del juego
+  resetGame()
+  
+  // Persistir los cambios
+  saveToLocalStorage({
+    teams: toPlain(teams.value),
+    settings: {
+      defaultTimeLimit: defaultTimeLimit.value,
+      buzzerTimeLimit: buzzerTimeLimit.value,
+      sampleSize: sampleSize.value,
+      sampleRandomized: sampleRandomized.value,
+    },
+  })
+  
+  sendMessage({ type: 'RESET_GAME' })
+  sendStateSnapshot()
+}
+function clearUsedQuestions() {
+  localStorage.removeItem('usedQuestions')
+  console.log('🗑️ Historial de preguntas usadas limpiado')
+}
 
   function setDisplayMode(mode: DisplayMode) {
     displayMode.value = mode
@@ -1309,5 +1361,6 @@ export const useGameStore = defineStore('game', () => {
     // audio
     initAudio,
     finalizeGame,
+    clearUsedQuestions,
   }
 })

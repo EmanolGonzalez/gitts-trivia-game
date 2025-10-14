@@ -54,6 +54,12 @@ function saveParticipants() {
   participantsModalOpen.value = false
 }
 
+function clearHistory() {
+  if (confirm('¿Limpiar el historial de preguntas usadas? Esto permitirá usar todas las preguntas nuevamente.')) {
+    game.clearUsedQuestions()
+    alert('✅ Historial limpiado. Las preguntas estarán disponibles en la próxima partida.')
+  }
+}
 // --------- Lifecycle ---------
 onMounted(() => {
   game.initBroadcastChannel('control') // auto-carga (localStorage o /data) + snapshots
@@ -92,12 +98,20 @@ function start() {
 }
 
 function next() {
-  // Si showRoulette no está visible, mostrarlo primero
+  // ✅ PRIMERO: Verificar si ya terminamos todas las preguntas
+  const nextIdx = game.deckIndex + 1
+  if (nextIdx >= game.questionDeck.length) {
+    // Ya no hay más preguntas, ir directo al scoreboard
+    game.nextQuestion() // esto internamente detectará que se acabaron y mostrará scoreboard
+    showRoulette.value = false
+    return
+  }
+
+  // Si la ruleta NO está visible, mostrarla primero
   if (!showRoulette.value) {
-    // Determinar la categoría de la siguiente pregunta
+    // Determinar categoría de la próxima pregunta para animar hacia ella
     let targetCategoryIndex: number | undefined = undefined
     if (game.questionDeck.length > 0) {
-      const nextIdx = Math.min(game.deckIndex + 1, game.questionDeck.length - 1)
       const nextQId = game.questionDeck[nextIdx]
       const nextQ = game.questions.find((qq) => qq.id === nextQId)
       if (nextQ) {
@@ -119,7 +133,7 @@ function next() {
     return
   }
 
-  // Si la ruleta ya está visible, avanzar
+  // Si la ruleta YA está visible, avanzar a la siguiente pregunta
   game.nextQuestion()
   showRoulette.value = false
 }
@@ -255,43 +269,43 @@ watch(
           </div>
         </div>
 
-        <div class="flex items-center gap-2">
-          <button
-            class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm"
-            @click="toMode('question')"
-            title="Mostrar pregunta en pantalla"
-          >
-            Pregunta
-          </button>
-          <button
-            class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm"
-            @click="toMode('answer')"
-            title="Mostrar respuesta en pantalla"
-          >
-            Respuesta
-          </button>
-          <button
-            class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm"
-            @click="toMode('scoreboard')"
-            title="Mostrar puntuaciones"
-          >
-            Puntuaciones
-          </button>
-          <button
-            class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm"
-            @click="toMode('paused')"
-            title="Pausar visual"
-          >
-            Pausa
-          </button>
-          <button
-            class="px-3 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 border border-rose-500 text-sm"
-            @click="resetGame"
-            title="Reiniciar partida"
-          >
-            Reiniciar
-          </button>
-        </div>
+      <div class="flex items-center gap-2">
+        <!-- Botones existentes -->
+        <button
+          class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm"
+          @click="toMode('question')"
+        >
+          Pregunta
+        </button>
+        <button
+          class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm"
+          @click="toMode('answer')"
+        >
+          Respuesta
+        </button>
+        <button
+          class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm"
+          @click="toMode('scoreboard')"
+        >
+          Puntuaciones
+        </button>
+        
+        <!-- NUEVO: Botón limpiar historial -->
+        <button
+          class="px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 border border-amber-500 text-sm"
+          @click="clearHistory"
+          title="Limpiar historial de preguntas usadas"
+        >
+          🗑️ Limpiar Historial
+        </button>
+        
+        <button
+          class="px-3 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 border border-rose-500 text-sm"
+          @click="resetGame"
+        >
+          Reiniciar
+        </button>
+      </div>
       </div>
     </header>
 
@@ -680,6 +694,6 @@ watch(
       </div>
     </div>
 
-  <!-- The roulette overlay is handled on Displays via SHOW_ROULETTE messages -->
+
   </div>
 </template>
