@@ -601,35 +601,35 @@ export const useGameStore = defineStore('game', () => {
   /** ---------------------
    *  DECK DE PREGUNTAS
    * --------------------- */
-async function buildQuestionDeck() {
-  // Cargar preguntas ya usadas
-  const usedIds = await fetchUsedQuestions()
-  
-  // Filtrar preguntas disponibles (que NO estén usadas)
-  const availableQuestions = questions.value.filter(q => !usedIds.includes(q.id))
-  
-  // Si no quedan suficientes preguntas, limpiar el historial y usar todas
-  if (availableQuestions.length < Math.min(5, questions.value.length)) {
-    console.log('🔄 Pocas preguntas disponibles, reiniciando el pool...')
-    localStorage.removeItem('usedQuestions')
-    // Usar todas las preguntas
-    const ids = questions.value.map((q) => q.id)
+  async function buildQuestionDeck() {
+    // Cargar preguntas ya usadas
+    const usedIds = await fetchUsedQuestions()
+
+    // Filtrar preguntas disponibles (que NO estén usadas)
+    const availableQuestions = questions.value.filter((q) => !usedIds.includes(q.id))
+
+    // Si no quedan suficientes preguntas, limpiar el historial y usar todas
+    if (availableQuestions.length < Math.min(5, questions.value.length)) {
+      console.log('🔄 Pocas preguntas disponibles, reiniciando el pool...')
+      localStorage.removeItem('usedQuestions')
+      // Usar todas las preguntas
+      const ids = questions.value.map((q) => q.id)
+      const N = Math.max(1, Math.min(sampleSize.value, ids.length))
+      const final = sampleRandomized.value ? shuffle(ids).slice(0, N) : ids.slice(0, N)
+      questionDeck.value = final
+      deckIndex.value = -1
+      return
+    }
+
+    // Construir deck solo con preguntas disponibles
+    const ids = availableQuestions.map((q) => q.id)
     const N = Math.max(1, Math.min(sampleSize.value, ids.length))
     const final = sampleRandomized.value ? shuffle(ids).slice(0, N) : ids.slice(0, N)
     questionDeck.value = final
     deckIndex.value = -1
-    return
+
+    console.log(`✅ Deck construido: ${final.length} preguntas (${usedIds.length} ya usadas)`)
   }
-  
-  // Construir deck solo con preguntas disponibles
-  const ids = availableQuestions.map((q) => q.id)
-  const N = Math.max(1, Math.min(sampleSize.value, ids.length))
-  const final = sampleRandomized.value ? shuffle(ids).slice(0, N) : ids.slice(0, N)
-  questionDeck.value = final
-  deckIndex.value = -1
-  
-  console.log(`✅ Deck construido: ${final.length} preguntas (${usedIds.length} ya usadas)`)
-}
   function shuffle<T>(array: T[]): T[] {
     const a = [...array]
     for (let i = a.length - 1; i > 0; i--) {
@@ -644,22 +644,22 @@ async function buildQuestionDeck() {
   /** ---------------------
    *  FLUJO DE CONTROL
    * --------------------- */
-async function startGame() {
-  if (questions.value.length === 0) return
-  
-  // Initialize audio on user gesture
-  try {
-    initAudio()
-  } catch {}
-  
-  // Construir deck filtrando preguntas usadas
-  await buildQuestionDeck()
-  
-  status.value = 'question'
-  displayMode.value = 'question'
-  sendMessage({ type: 'START_GAME' })
-  nextQuestion()
-}
+  async function startGame() {
+    if (questions.value.length === 0) return
+
+    // Initialize audio on user gesture
+    try {
+      initAudio()
+    } catch {}
+
+    // Construir deck filtrando preguntas usadas
+    await buildQuestionDeck()
+
+    status.value = 'question'
+    displayMode.value = 'question'
+    sendMessage({ type: 'START_GAME' })
+    nextQuestion()
+  }
 
   function selectQuestion(questionId: string) {
     // cancel any pending auto-next
@@ -677,55 +677,59 @@ async function startGame() {
   }
 
   function showAnswer() {
+    // Pasamos a revisión y detenemos timers
     status.value = 'review'
     displayMode.value = 'answer'
     stopGeneralTimer()
     stopBuzzerTimer()
+
+    // 🔒 Persistir pregunta usada al cerrar la ronda (independiente de next)
+    if (currentQuestionId.value) {
+      saveUsedQuestions([currentQuestionId.value]).catch(() => {})
+    }
+
     sendMessage({ type: 'SHOW_ANSWER' })
     sendStateSnapshot()
   }
 
-function nextQuestion() {
-  // cancel pending auto-next to avoid double-advance
-  if (autoNextTimeout) {
-    clearTimeout(autoNextTimeout)
-    autoNextTimeout = null
+  async function nextQuestion() {
+    if (autoNextTimeout) {
+      clearTimeout(autoNextTimeout)
+      autoNextTimeout = null
+    }
+
+    // 🔒 La actual se persiste como usada ANTES de avanzar
+    if (currentQuestionId.value) {
+      await saveUsedQuestions([currentQuestionId.value]).catch(() => {})
+    }
+
+    // Construir deck si aún no existe
+    if (questionDeck.value.length === 0) {
+      await buildQuestionDeck()
+    }
+
+    const nextIdx = deckIndex.value + 1
+    if (nextIdx >= questionDeck.value.length) {
+      // 👇 Finalización fuerte (persistencia e idempotencia)
+      try {
+        await finalizeGame()
+      } catch {}
+      status.value = 'finished'
+      displayMode.value = 'scoreboard'
+      try {
+        stopAllAudio()
+      } catch {}
+      sendMessage({ type: 'NEXT_QUESTION' })
+      sendStateSnapshot()
+      return
+    }
+
+    deckIndex.value = nextIdx
+    const nextId = questionDeck.value[deckIndex.value]
+    if (nextId) {
+      selectQuestion(nextId) // ya maneja timers y snapshot
+    }
   }
-  
-  // Guardar la pregunta actual como usada ANTES de avanzar
-  if (currentQuestionId.value) {
-    saveUsedQuestions([currentQuestionId.value]).catch(err => {
-      console.warn('Error guardando pregunta usada:', err)
-    })
-  }
-  
-  if (questionDeck.value.length === 0) buildQuestionDeck()
-  const nextIdx = deckIndex.value + 1
-  
-  if (nextIdx >= questionDeck.value.length) {
-    // 🎯 JUEGO TERMINADO - Mostrar scoreboard
-    status.value = 'finished'
-    displayMode.value = 'scoreboard'
-    try {
-      stopAllAudio()
-    } catch {}
-    sendMessage({ type: 'NEXT_QUESTION' })
-    sendStateSnapshot()
-    return
-  }
-  
-  deckIndex.value = nextIdx
-  const nextId = questionDeck.value[deckIndex.value]
-  if (!nextId) {
-    status.value = 'finished'
-    displayMode.value = 'scoreboard'
-    sendMessage({ type: 'NEXT_QUESTION' })
-    sendStateSnapshot()
-    return
-  }
-  selectQuestion(nextId)
-  sendMessage({ type: 'NEXT_QUESTION' })
-}
 
   function teamBuzzed(teamId: string) {
     if (hasAnyTeamBuzzed.value || disabledTeamsForQuestion.value.includes(teamId)) return
@@ -743,91 +747,104 @@ function nextQuestion() {
     const pts = points ?? currentQuestion.value?.points ?? 0
     if (team) team.score += pts
 
-    // Cancelar cualquier auto-next pendiente
+    // Cancelar auto-next si existiera
     if (autoNextTimeout) {
       clearTimeout(autoNextTimeout)
       autoNextTimeout = null
     }
 
-    // Detener todos los timers y resetear estado de buzz
+    // Detener timers y limpiar estado de buzz
     stopGeneralTimer()
     stopBuzzerTimer()
     activeTeamId.value = null
     hasAnyTeamBuzzed.value = false
 
-    // Cambiar a modo review
+    // 🔒 Persistir usada (la ronda se cierra con acierto)
+    if (currentQuestionId.value) {
+      saveUsedQuestions([currentQuestionId.value]).catch(() => {})
+    }
+
+    // Modo revisión
     status.value = 'review'
     displayMode.value = 'answer'
 
-    // Notificar a displays
+    // Notificar
     sendMessage({ type: 'MARK_CORRECT', teamId, points: pts })
     sendStateSnapshot()
 
-    // Reproducir sonido
+    // efecto de audio (si lo tienes)
     try {
       playCorrect()
     } catch {}
   }
 
-  // Reemplaza la función markIncorrect existente con esta:
   function markIncorrect(teamId: string) {
-    // Cancelar cualquier auto-next pendiente
+    // Cancelar auto-next si existiera
     if (autoNextTimeout) {
       clearTimeout(autoNextTimeout)
       autoNextTimeout = null
     }
 
+    // Deshabilitar equipo que falló y detener buzzer
     disableTeam(teamId)
     stopBuzzerTimer()
-    activeTeamId.value = null
-    hasAnyTeamBuzzed.value = false
 
-    // Si no quedan equipos disponibles -> cerrar la ronda
-    if (availableTeams.value.length === 0) {
-      stopGeneralTimer(false)
+    // ¿Queda algún equipo habilitado para intentar?
+    const anyTeamLeft = availableTeams.value && availableTeams.value.length > 0
+
+    if (!anyTeamLeft) {
+      // Nadie más puede responder → cerramos ronda
+      stopGeneralTimer()
+      activeTeamId.value = null
+      hasAnyTeamBuzzed.value = false
       status.value = 'review'
       displayMode.value = 'answer'
-      sendMessage({ type: 'TIME_EXPIRED', version: bump() })
-      // NO llamar a onTimeExpired aquí, dejar que el usuario avance manualmente
-      sendMessage({ type: 'MARK_INCORRECT', teamId })
-      sendStateSnapshot()
-      return
+
+      // 🔒 Persistir usada (la pregunta ya no tendrá más intentos)
+      if (currentQuestionId.value) {
+        saveUsedQuestions([currentQuestionId.value]).catch(() => {})
+      }
+
+      // Rehabilitar para la próxima pregunta
+      enableAllTeamsForQuestion()
     }
 
-    // Reanudar desde snapshot si quedan equipos
+    // Notificar
+    sendMessage({ type: 'MARK_INCORRECT', teamId })
+    sendStateSnapshot()
+
+    // sonido si aplica
     try {
       playIncorrect()
     } catch {}
-    resumeGeneralTimer()
-    sendMessage({ type: 'MARK_INCORRECT', teamId })
+  }
+
+  // 5. MODIFICAR hardResetGame() para limpiar preguntas usadas si se solicita
+  function hardResetGame() {
+    // Limpiar scores
+    teams.value.forEach((t) => (t.score = 0))
+
+    // Resetear estado del juego
+    resetGame()
+
+    // Persistir los cambios
+    saveToLocalStorage({
+      teams: toPlain(teams.value),
+      settings: {
+        defaultTimeLimit: defaultTimeLimit.value,
+        buzzerTimeLimit: buzzerTimeLimit.value,
+        sampleSize: sampleSize.value,
+        sampleRandomized: sampleRandomized.value,
+      },
+    })
+
+    sendMessage({ type: 'RESET_GAME' })
     sendStateSnapshot()
   }
-// 5. MODIFICAR hardResetGame() para limpiar preguntas usadas si se solicita
-function hardResetGame() {
-  // Limpiar scores
-  teams.value.forEach((t) => (t.score = 0))
-  
-  // Resetear estado del juego
-  resetGame()
-  
-  // Persistir los cambios
-  saveToLocalStorage({
-    teams: toPlain(teams.value),
-    settings: {
-      defaultTimeLimit: defaultTimeLimit.value,
-      buzzerTimeLimit: buzzerTimeLimit.value,
-      sampleSize: sampleSize.value,
-      sampleRandomized: sampleRandomized.value,
-    },
-  })
-  
-  sendMessage({ type: 'RESET_GAME' })
-  sendStateSnapshot()
-}
-function clearUsedQuestions() {
-  localStorage.removeItem('usedQuestions')
-  console.log('🗑️ Historial de preguntas usadas limpiado')
-}
+  function clearUsedQuestions() {
+    localStorage.removeItem('usedQuestions')
+    console.log('🗑️ Historial de preguntas usadas limpiado')
+  }
 
   function setDisplayMode(mode: DisplayMode) {
     displayMode.value = mode
@@ -849,7 +866,7 @@ function clearUsedQuestions() {
 
     const bc = new BroadcastChannel('trivia')
     channel.value = bc
-    bc.onmessage = (ev) => handleIncomingMessage(ev.data as GameMessage)
+    bc.onmessage = (ev) => { handleIncomingMessage(ev.data as GameMessage) }
 
     if (role.value === 'display') {
       const ping = () => sendMessage({ type: 'HELLO' })
@@ -950,7 +967,7 @@ function clearUsedQuestions() {
     snapshotInterval = null
   }
 
-  function handleIncomingMessage(msg: GameMessage) {
+  async function handleIncomingMessage(msg: GameMessage) {
     if (
       msg.type === 'SHOW_ROULETTE' ||
       msg.type === 'ROULETTE_RESULT' ||
@@ -1049,22 +1066,41 @@ function clearUsedQuestions() {
         resetGame()
         break
 
+      // dentro de handleIncomingMessage(msg)
       case 'ROULETTE_RESULT': {
-        // When the control receives a roulette result (sent by a display or the control itself)
-        // pick a question matching the category and select it. Make selection idempotent.
         if (role.value === 'control') {
           const m = msg as RouletteResultMessage
           const catId = m.category?.id
-          if (catId) {
-            // prefer a question in that category that isn't already selected
-            const next = questions.value.find(
-              (q) => q.categoryId === catId && q.id !== currentQuestionId.value,
-            )
-            if (next) {
-              // guard: if we're already selecting this question, ignore
-              if (currentQuestionId.value === next.id) return
-              selectQuestion(next.id)
-            }
+          if (!catId) break
+
+          // 🔎 Traemos usadas para no repetir
+          let used: string[] = []
+          try {
+            used = await fetchUsedQuestions()
+          } catch {}
+
+          const chosen = questions.value.find(
+            (q) =>
+              q.categoryId === catId && q.id !== currentQuestionId.value && !used.includes(q.id),
+          )
+          if (!chosen) {
+            console.warn('Ruleta: no hay preguntas disponibles sin repetir en la categoría.')
+            break
+          }
+
+          // Sincronizar con deck: colocar justo después del índice actual
+          const pos = questionDeck.value.indexOf(chosen.id)
+          const target = Math.max(deckIndex.value + 1, 0)
+          if (pos >= 0 && pos !== target) {
+            questionDeck.value.splice(pos, 1)
+            questionDeck.value.splice(target, 0, chosen.id)
+          } else if (pos < 0) {
+            questionDeck.value.splice(target, 0, chosen.id)
+          }
+
+          // Seleccionar la pregunta y entrar al modo 'question'
+          if (currentQuestionId.value !== chosen.id) {
+            selectQuestion(chosen.id)
           }
         }
         break
