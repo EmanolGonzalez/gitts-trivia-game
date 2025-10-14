@@ -234,50 +234,8 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
-  function fadeAmbient(targetVolume: number, duration = 200) {
-    try {
-      if (!ambientAudio.value) return
-      const el = ambientAudio.value
-      const start = Number(el.volume ?? 1)
-      const to = Math.max(0, Math.min(1, targetVolume))
-      const diff = to - start
-      if (Math.abs(diff) < 0.001) return
-      const steps = 10
-      const stepTime = Math.max(10, Math.floor(duration / steps))
-      let i = 0
-      const id = window.setInterval(() => {
-        i++
-        try {
-          const v = start + (diff * i) / steps
-          el.volume = Math.max(0, Math.min(1, v))
-        } catch {}
-        if (i >= steps) clearInterval(id)
-      }, stepTime)
-    } catch {}
-  }
 
-  function playAmbient() {
-    try {
-      if (!ambientAudio.value) initAudio()
-      // ensure volume restored and play
-      try {
-        if (ambientAudio.value) ambientAudio.value.volume = 1
-      } catch {}
-      ambientAudio.value?.play().catch(() => {})
-    } catch {}
-  }
 
-  /* eslint-disable @typescript-eslint/no-unused-vars */
-  function stopAmbient() {
-    try {
-      if (ambientAudio.value) {
-        ambientAudio.value.pause()
-        try {
-          ambientAudio.value.currentTime = 0
-        } catch {}
-      }
-    } catch {}
-  }
   /* eslint-enable @typescript-eslint/no-unused-vars */
 
   function stopAllAudio() {
@@ -306,7 +264,6 @@ export const useGameStore = defineStore('game', () => {
   function playCorrect() {
     try {
       // lower ambient volume smoothly, play effect and restore on end
-      if (!correctAudio.value) initAudio()
       if (correctAudio.value) {
         correctAudio.value.currentTime = 0
         correctAudio.value.play().catch(() => {})
@@ -317,7 +274,6 @@ export const useGameStore = defineStore('game', () => {
   function playIncorrect() {
     try {
       // lower ambient volume smoothly, play effect and restore on end
-      if (!incorrectAudio.value) initAudio()
       if (incorrectAudio.value) {
         incorrectAudio.value.currentTime = 0
         incorrectAudio.value.play().catch(() => {})

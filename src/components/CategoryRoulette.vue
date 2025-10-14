@@ -4,8 +4,8 @@
       ref="rouletteRef"
       :items="wheelItems"
       :duration="5"
-      :stop-index="stopIndex"
-  :wheel-result-index="stopIndex"
+      :first-item-index="firstItemIndex"
+      :wheel-result-index="wheelResultIndex"
       @wheel-end="onSpinEnd"
     />
     <button v-if="!autoSpin" @click="spinRoulette" class="spin-button">Girar Ruleta</button>
@@ -13,13 +13,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, defineEmits, defineProps, watch, computed } from 'vue'
-import Roulette from 'vue3-roulette'
+import { ref, defineEmits, defineProps, computed, onMounted } from 'vue'
 
 const props = defineProps<{
   categories?: { id: string; label: string; color?: string }[]
   autoSpin?: boolean
-  // optional: parent can set a specific start index
   startIndex?: number | null
 }>()
 
@@ -38,21 +36,50 @@ const categoriesLocal = computed(() =>
   props.categories && props.categories.length >= 1 ? props.categories : defaultCategories,
 )
 
-// Map categories into the minimal shape expected by the wheel (id, label)
-const wheelItems = computed(() => categoriesLocal.value.map((c) => ({ id: c.id, label: c.label })))
+// ✅ ESTRUCTURA CORRECTA: vue3-roulette requiere estos campos específicos
+const wheelItems = computed(() => 
+  categoriesLocal.value.map((c, index) => ({
+    id: index + 1,  // vue3-roulette usa id numérico
+    name: c.label,
+    htmlContent: c.label,
+    textColor: '#ffffff',
+    background: c.color || '#94a3b8'
+  }))
+)
+
+// ✅ PADDING: Si hay menos de 4 items, rellenar con items dummy para cumplir el validador
+const paddedWheelItems = computed(() => {
+  const items = wheelItems.value
+  if (items.length >= 4) return items
+  
+  const padding = []
+  const colors = ['#ef4444', '#3b82f6', '#f59e0b', '#22c55e', '#8b5cf6', '#ec4899']
+  
+  for (let i = items.length; i < 4; i++) {
+    padding.push({
+      id: i + 1,
+      name: '—',
+      htmlContent: '—',
+      textColor: '#ffffff',
+      background: colors[i % colors.length]
+    })
+  }
+  
+  return [...items, ...padding]
+})
 
 const autoSpin = props.autoSpin ?? false
 
-// stopIndex required by the component API/types: set to -1 initially
-const stopIndex = ref<number>(-1)
+// ✅ Props deben ser OBJETOS con propiedad 'value'
+const firstItemIndex = ref({ value: 0 })
+const wheelResultIndex = ref<{ value: number | null }>({ value: null })
 
 function spinRoulette() {
-  // random spin
   try {
     const N = wheelItems.value.length
     if (N === 0) return
     const idx = Math.floor(Math.random() * N)
-    stopIndex.value = idx
+    wheelResultIndex.value = { value: idx }
     rouletteRef.value?.launchWheel?.()
   } catch (err) {
     console.warn('No se pudo lanzar la ruleta:', err)
@@ -63,40 +90,41 @@ function spinTo(index?: number | null) {
   try {
     const N = wheelItems.value.length
     if (N === 0) return
-    const idx = typeof index === 'number' && index >= 0 && index < N ? index : Math.floor(Math.random() * N)
-    stopIndex.value = idx
+    const idx = typeof index === 'number' && index >= 0 && index < N 
+      ? index 
+      : Math.floor(Math.random() * N)
+    wheelResultIndex.value = { value: idx }
     rouletteRef.value?.launchWheel?.()
   } catch (err) {
     console.warn('spinTo failed', err)
   }
 }
 
-// expose programmatic control to parent
 defineExpose({ spinTo })
 
-type WheelItem = { id: string; label: string }
-
-function onSpinEnd(item: WheelItem | null) {
-  // library emits the selected item (the original object from wheelItems)
+function onSpinEnd(item: any) {
   if (!item) return
-  const cat = { id: String(item.id), label: item.label }
+  
+  // Encontrar la categoría original usando el name
+  const originalCategory = categoriesLocal.value.find(c => c.label === item.name)
+  if (!originalCategory) return
+  
+  const cat = { id: originalCategory.id, label: originalCategory.label }
   emit('spin-end', cat)
 }
 
-watch(
-  () => props.autoSpin,
-  (v) => {
-    if (v) setTimeout(() => spinRoulette(), 120)
-  },
-  { immediate: true },
-)
-
-// if parent provided a startIndex prop, spin to it once
-if (props.startIndex != null) {
-  setTimeout(() => {
-    spinTo(props.startIndex ?? null)
-  }, 120)
-}
+// ✅ Lógica de auto-spin mejorada
+onMounted(() => {
+  if (autoSpin) {
+    setTimeout(() => {
+      if (props.startIndex != null) {
+        spinTo(props.startIndex)
+      } else {
+        spinRoulette()
+      }
+    }, 120)
+  }
+})
 </script>
 
 <style scoped>
