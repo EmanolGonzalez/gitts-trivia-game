@@ -84,6 +84,9 @@ export const useGameStore = defineStore('game', () => {
 
   // Versión del estado
   const version = ref<number>(0)
+  // Guard para evitar doble calificación por la misma acción/pregunta
+  // Usamos una set con claves `${type}:${questionId}`
+  const processedMarks = ref<Set<string>>(new Set())
 
   // Canal de comunicación
   const role = ref<Role>('display')
@@ -233,7 +236,7 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
-  /* eslint-enable @typescript-eslint/no-unused-vars */
+  
 
   function stopAllAudio() {
     try {
@@ -743,6 +746,10 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function markCorrect(teamId: string, points?: number) {
+    // Idempotencia local: evitar doble marcación para la misma pregunta
+    const keyLocal = currentQuestionId.value ? `MARK_CORRECT:${currentQuestionId.value}` : null
+    if (keyLocal && processedMarks.value.has(keyLocal)) return
+
     const team = teams.value.find((t) => t.id === teamId)
     const pts = points ?? currentQuestion.value?.points ?? 0
     if (team) team.score += pts
@@ -768,8 +775,18 @@ export const useGameStore = defineStore('game', () => {
     status.value = 'review'
     displayMode.value = 'answer'
 
-    // Notificar
-    sendMessage({ type: 'MARK_CORRECT', teamId, points: pts })
+    // Notificar (incluir questionId para idempotencia)
+    const payload: MarkCorrectMessage = {
+      type: 'MARK_CORRECT',
+      teamId,
+      points: pts,
+      questionId: currentQuestionId.value ?? undefined,
+    }
+    // Guardar como procesado localmente para evitar reenvíos duplicados
+    try {
+      if (currentQuestionId.value) processedMarks.value.add(`MARK_CORRECT:${currentQuestionId.value}`)
+    } catch {}
+    sendMessage(payload)
     sendStateSnapshot()
 
     // efecto de audio (si lo tienes)
@@ -779,6 +796,10 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function markIncorrect(teamId: string) {
+    // Idempotencia local: evitar doble marcación para la misma pregunta
+    const keyLocal = currentQuestionId.value ? `MARK_INCORRECT:${currentQuestionId.value}` : null
+    if (keyLocal && processedMarks.value.has(keyLocal)) return
+
     // Cancelar auto-next si existiera
     if (autoNextTimeout) {
       clearTimeout(autoNextTimeout)
@@ -809,8 +830,16 @@ export const useGameStore = defineStore('game', () => {
       enableAllTeamsForQuestion()
     }
 
-    // Notificar
-    sendMessage({ type: 'MARK_INCORRECT', teamId })
+    // Notificar (incluir questionId para idempotencia)
+    const payload: MarkIncorrectMessage = {
+      type: 'MARK_INCORRECT',
+      teamId,
+      questionId: currentQuestionId.value ?? undefined,
+    }
+    try {
+      if (currentQuestionId.value) processedMarks.value.add(`MARK_INCORRECT:${currentQuestionId.value}`)
+    } catch {}
+    sendMessage(payload)
     sendStateSnapshot()
 
     // sonido si aplica
@@ -1274,27 +1303,40 @@ export const useGameStore = defineStore('game', () => {
       }
 
       case 'MARK_CORRECT': {
-        const m = msg as MarkCorrectMessage
-        const team = teams.value.find((t) => t.id === m.teamId)
-        if (team) team.score += m.points
-        status.value = 'review'
-        resetTimers()
-        // display plays correct sound when receiving mark
-        try {
-          playCorrect()
-        } catch {}
+        {
+          const m = msg as MarkCorrectMessage
+          // Idempotencia: si ya procesamos una marca para esta pregunta, ignorar
+          const key = m.questionId ? `MARK_CORRECT:${m.questionId}` : null
+          if (key && processedMarks.value.has(key)) break
+          if (key) processedMarks.value.add(key)
+
+          const team = teams.value.find((t) => t.id === m.teamId)
+          if (team) team.score += m.points
+          status.value = 'review'
+          resetTimers()
+          // display plays correct sound when receiving mark
+          try {
+            playCorrect()
+          } catch {}
+        }
         break
       }
 
       case 'MARK_INCORRECT': {
-        const m = msg as MarkIncorrectMessage
-        disableTeam(m.teamId)
-        activeTeamId.value = null
-        hasAnyTeamBuzzed.value = false
-        // display plays incorrect sound when receiving mark_incorrect
-        try {
-          playIncorrect()
-        } catch {}
+        {
+          const m = msg as MarkIncorrectMessage
+          const key = m.questionId ? `MARK_INCORRECT:${m.questionId}` : null
+          if (key && processedMarks.value.has(key)) break
+          if (key) processedMarks.value.add(key)
+
+          disableTeam(m.teamId)
+          activeTeamId.value = null
+          hasAnyTeamBuzzed.value = false
+          // display plays incorrect sound when receiving mark_incorrect
+          try {
+            playIncorrect()
+          } catch {}
+        }
         break
       }
 

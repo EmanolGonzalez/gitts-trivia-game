@@ -121,8 +121,14 @@ export type ResetGameMessage = { type: 'RESET_GAME' }
  *  ----------------------------- */
 
 export type TeamBuzzedMessage = { type: 'TEAM_BUZZED'; teamId: string }
-export type MarkCorrectMessage = { type: 'MARK_CORRECT'; teamId: string; points: number }
-export type MarkIncorrectMessage = { type: 'MARK_INCORRECT'; teamId: string }
+// Se añade questionId opcional para permitir idempotencia y evitar doble calificación
+export type MarkCorrectMessage = {
+  type: 'MARK_CORRECT'
+  teamId: string
+  points: number
+  questionId?: string
+}
+export type MarkIncorrectMessage = { type: 'MARK_INCORRECT'; teamId: string; questionId?: string }
 
 /** -----------------------------
  *  Timers general con deadlines + versión
