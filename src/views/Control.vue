@@ -5,6 +5,14 @@ import { useGameStore } from '@/stores/game'
 
 const game = useGameStore()
 
+// Preguntas del deck (las que se van a presentar)
+import type { Question } from '@/types/game'
+const deckQuestions = computed<Question[]>(() =>
+  game.questionDeck
+    .map((id) => game.questions.find((q) => q.id === id))
+    .filter((q): q is Question => Boolean(q)),
+)
+
 // Modal para seleccionar participantes (útil con muchos equipos)
 const participantsModalOpen = ref(false)
 const participationSelection = ref<Record<string, boolean>>({})
@@ -609,8 +617,8 @@ watch(
           </div>
           <div class="p-4 space-y-2 text-sm">
             <div class="flex items-center justify-between">
-              <span class="text-slate-400">Preguntas:</span>
-              <span class="font-medium">{{ game.questions.length }}</span>
+              <span class="text-slate-400">En muestra (deck):</span>
+              <span class="font-medium">{{ game.questionDeck.length }}</span>
             </div>
             <div class="flex items-center justify-between">
               <span class="text-slate-400">Equipos:</span>
@@ -637,7 +645,21 @@ watch(
               </span>
             </div>
           </div>
-
+          <div class="px-4 pb-4 text-sm">
+            <div class="text-slate-400 mb-2">Próximas preguntas (muestra):</div>
+            <div class="max-h-40 overflow-auto space-y-1">
+              <div
+                v-for="(dq, i) in deckQuestions"
+                :key="dq.id"
+                class="text-xs p-2 rounded flex items-start gap-2"
+                :class="{ 'bg-slate-800': i === game.deckIndex, 'bg-transparent': i !== game.deckIndex }"
+              >
+                <div class="w-6 text-slate-400">{{ i + 1 }}</div>
+                <div class="truncate text-slate-200">{{ dq.text || ('#' + dq.id) }}</div>
+              </div>
+              <div v-if="deckQuestions.length === 0" class="text-xs text-slate-400">(muestra vacía)</div>
+            </div>
+          </div>
           <div class="px-4 pb-4 text-[11px] text-slate-400">
             Atajos: <kbd class="px-1.5 py-0.5 bg-slate-800 rounded">Espacio</kbd> muestra/avanza ·
             <kbd class="px-1.5 py-0.5 bg-slate-800 rounded">N</kbd> siguiente ·

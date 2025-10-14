@@ -127,8 +127,9 @@ export type MarkCorrectMessage = {
   teamId: string
   points: number
   questionId?: string
+  actionId?: string
 }
-export type MarkIncorrectMessage = { type: 'MARK_INCORRECT'; teamId: string; questionId?: string }
+export type MarkIncorrectMessage = { type: 'MARK_INCORRECT'; teamId: string; questionId?: string; actionId?: string }
 
 /** -----------------------------
  *  Timers general con deadlines + versión

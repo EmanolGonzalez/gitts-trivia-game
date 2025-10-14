@@ -85,7 +85,7 @@ export const useGameStore = defineStore('game', () => {
   // Versión del estado
   const version = ref<number>(0)
   // Guard para evitar doble calificación por la misma acción/pregunta
-  // Usamos una set con claves `${type}:${questionId}`
+  // Usamos una set con claves `${type}:action:${actionId}` y fallback `${type}:question:${questionId}`
   const processedMarks = ref<Set<string>>(new Set())
 
   // Canal de comunicación
@@ -95,6 +95,7 @@ export const useGameStore = defineStore('game', () => {
   let snapshotInterval: number | null = null
   let helloRetryInterval: number | null = null
   let autoNextTimeout: number | null = null
+  let lastRouletteInsertionAt: number | null = null
   // Audio elements for ambient and effects
   const ambientAudio = ref<HTMLAudioElement | null>(null)
   const correctAudio = ref<HTMLAudioElement | null>(null)
@@ -529,15 +530,8 @@ export const useGameStore = defineStore('game', () => {
         sampleRandomized: s?.sampleRandomized ?? sampleRandomized.value,
       }
 
-      // Restore teams if present in saved settings; otherwise use sane defaults
-      const defaultTeams: Team[] = [
-        { id: 't-azules', name: 'Azules', score: 0, color: '#3b82f6' },
-        { id: 't-rojos', name: 'Rojos', score: 0, color: '#ef4444' },
-        { id: 't-verdes', name: 'Verdes', score: 0, color: '#22c55e' },
-        { id: 't-amarillos', name: 'Amarillos', score: 0, color: '#f59e0b' },
-      ]
-
-      const savedTeams = Array.isArray(s?.teams) && s.teams.length ? s.teams : defaultTeams
+      // Restore teams if present in saved settings; otherwise start with an empty list
+      const savedTeams: Team[] = Array.isArray(s?.teams) && s.teams.length ? s.teams : []
 
       const gameState = { teams: savedTeams, settings } as GameData
 
@@ -619,7 +613,8 @@ export const useGameStore = defineStore('game', () => {
       const ids = questions.value.map((q) => q.id)
       const N = Math.max(1, Math.min(sampleSize.value, ids.length))
       const final = sampleRandomized.value ? shuffle(ids).slice(0, N) : ids.slice(0, N)
-      questionDeck.value = final
+      // dedupe and ensure exact N
+      questionDeck.value = Array.from(new Set(final)).slice(0, N)
       deckIndex.value = -1
       return
     }
@@ -627,8 +622,9 @@ export const useGameStore = defineStore('game', () => {
     // Construir deck solo con preguntas disponibles
     const ids = availableQuestions.map((q) => q.id)
     const N = Math.max(1, Math.min(sampleSize.value, ids.length))
-    const final = sampleRandomized.value ? shuffle(ids).slice(0, N) : ids.slice(0, N)
-    questionDeck.value = final
+  const final = sampleRandomized.value ? shuffle(ids).slice(0, N) : ids.slice(0, N)
+  // Asegurar unicidad por si acaso (evita duplicados accidentales) y truncar a N
+  questionDeck.value = Array.from(new Set(final)).slice(0, N)
     deckIndex.value = -1
 
     console.log(`✅ Deck construido: ${final.length} preguntas (${usedIds.length} ya usadas)`)
@@ -644,6 +640,44 @@ export const useGameStore = defineStore('game', () => {
     return a
   }
 
+  // Normalize deck: ensure unique IDs, trim to sampleSize and keep deckIndex
+  function normalizeQuestionDeck() {
+    try {
+      const maxN = Math.max(1, Math.min(sampleSize.value, questions.value.length))
+      // Keep current question id to preserve position when possible
+      const currentId = questionDeck.value[deckIndex.value]
+      // Deduplicate preserving first occurrence order
+      const seen = new Set<string>()
+      const deduped: string[] = []
+      for (const id of questionDeck.value) {
+        if (!seen.has(id)) {
+          seen.add(id)
+          deduped.push(id)
+        }
+      }
+      // If dedup removed items and we have room, try to fill from all questions (not used) to reach size
+      if (deduped.length < maxN) {
+        const available = questions.value.map((q) => q.id).filter((id) => !deduped.includes(id))
+        for (const id of available) {
+          if (deduped.length >= maxN) break
+          deduped.push(id)
+        }
+      }
+      // Trim to maxN
+      questionDeck.value = deduped.slice(0, maxN)
+
+      // Restore deckIndex to the index of currentId if still present, else keep as is but not out of bounds
+      if (currentId) {
+        const newIdx = questionDeck.value.indexOf(currentId)
+        deckIndex.value = newIdx >= 0 ? newIdx : Math.min(Math.max(-1, deckIndex.value), questionDeck.value.length - 1)
+      } else {
+        deckIndex.value = Math.min(Math.max(-1, deckIndex.value), questionDeck.value.length - 1)
+      }
+    } catch (err) {
+      console.warn('normalizeQuestionDeck failed', err)
+    }
+  }
+
   /** ---------------------
    *  FLUJO DE CONTROL
    * --------------------- */
@@ -657,6 +691,9 @@ export const useGameStore = defineStore('game', () => {
 
     // Construir deck filtrando preguntas usadas
     await buildQuestionDeck()
+
+  // Asegurar deck normalizado
+  normalizeQuestionDeck()
 
     status.value = 'question'
     displayMode.value = 'question'
@@ -710,6 +747,9 @@ export const useGameStore = defineStore('game', () => {
     if (questionDeck.value.length === 0) {
       await buildQuestionDeck()
     }
+
+    // Normalizar por si hay duplicados residuales
+    normalizeQuestionDeck()
 
     const nextIdx = deckIndex.value + 1
     if (nextIdx >= questionDeck.value.length) {
@@ -776,15 +816,19 @@ export const useGameStore = defineStore('game', () => {
     displayMode.value = 'answer'
 
     // Notificar (incluir questionId para idempotencia)
+    const actionId = `a-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
     const payload: MarkCorrectMessage = {
       type: 'MARK_CORRECT',
       teamId,
       points: pts,
       questionId: currentQuestionId.value ?? undefined,
+      actionId,
     }
-    // Guardar como procesado localmente para evitar reenvíos duplicados
+    // Guardar como procesado localmente por actionId y por questionId (fallback)
     try {
-      if (currentQuestionId.value) processedMarks.value.add(`MARK_CORRECT:${currentQuestionId.value}`)
+      processedMarks.value.add(`MARK_CORRECT:action:${actionId}`)
+      if (currentQuestionId.value)
+        processedMarks.value.add(`MARK_CORRECT:question:${currentQuestionId.value}`)
     } catch {}
     sendMessage(payload)
     sendStateSnapshot()
@@ -828,16 +872,28 @@ export const useGameStore = defineStore('game', () => {
 
       // Rehabilitar para la próxima pregunta
       enableAllTeamsForQuestion()
+    } else {
+      // Permitir que otros equipos hagan buzz: limpiar el activo y el flag
+      activeTeamId.value = null
+      hasAnyTeamBuzzed.value = false
+      // Reanudar el timer general desde snapshot
+      try {
+        resumeGeneralTimer()
+      } catch {}
     }
 
     // Notificar (incluir questionId para idempotencia)
+    const actionId = `a-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
     const payload: MarkIncorrectMessage = {
       type: 'MARK_INCORRECT',
       teamId,
       questionId: currentQuestionId.value ?? undefined,
+      actionId,
     }
     try {
-      if (currentQuestionId.value) processedMarks.value.add(`MARK_INCORRECT:${currentQuestionId.value}`)
+      processedMarks.value.add(`MARK_INCORRECT:action:${actionId}`)
+      if (currentQuestionId.value)
+        processedMarks.value.add(`MARK_INCORRECT:question:${currentQuestionId.value}`)
     } catch {}
     sendMessage(payload)
     sendStateSnapshot()
@@ -1124,13 +1180,24 @@ export const useGameStore = defineStore('game', () => {
             questionDeck.value.splice(pos, 1)
             questionDeck.value.splice(target, 0, chosen.id)
           } else if (pos < 0) {
-            questionDeck.value.splice(target, 0, chosen.id)
+            const nowTs = Date.now()
+            // Debounce rapid insertions (ignore if same insertion happened very recently)
+            if (lastRouletteInsertionAt && nowTs - lastRouletteInsertionAt < 300) {
+              console.debug('Ignored rapid roulette insertion for', chosen.id)
+            } else {
+              questionDeck.value.splice(target, 0, chosen.id)
+              lastRouletteInsertionAt = nowTs
+            }
           }
+          
+          // Nota: NO seleccionamos automáticamente la pregunta aquí para evitar
+          // que la UI de control avance sola cuando el usuario solo quería
+          // insertar la pregunta elegida por la ruleta en el deck.
+          // La selección efectiva debe ocurrir cuando el control avance (nextQuestion()).
 
-          // Seleccionar la pregunta y entrar al modo 'question'
-          if (currentQuestionId.value !== chosen.id) {
-            selectQuestion(chosen.id)
-          }
+          // Asegurar unicidad y tamaño máximo tras la inserción (evita duplicados)
+          // Normalizar deck para eliminar duplicados y mantener tamaño
+          normalizeQuestionDeck()
         }
         break
       }
@@ -1305,10 +1372,12 @@ export const useGameStore = defineStore('game', () => {
       case 'MARK_CORRECT': {
         {
           const m = msg as MarkCorrectMessage
-          // Idempotencia: si ya procesamos una marca para esta pregunta, ignorar
-          const key = m.questionId ? `MARK_CORRECT:${m.questionId}` : null
-          if (key && processedMarks.value.has(key)) break
-          if (key) processedMarks.value.add(key)
+          // Idempotencia: preferir actionId, fallback por questionId
+          const aKey = m.actionId ? `MARK_CORRECT:action:${m.actionId}` : null
+          const qKey = m.questionId ? `MARK_CORRECT:question:${m.questionId}` : null
+          if ((aKey && processedMarks.value.has(aKey)) || (qKey && processedMarks.value.has(qKey))) break
+          if (aKey) processedMarks.value.add(aKey)
+          if (qKey) processedMarks.value.add(qKey)
 
           const team = teams.value.find((t) => t.id === m.teamId)
           if (team) team.score += m.points
@@ -1325,9 +1394,11 @@ export const useGameStore = defineStore('game', () => {
       case 'MARK_INCORRECT': {
         {
           const m = msg as MarkIncorrectMessage
-          const key = m.questionId ? `MARK_INCORRECT:${m.questionId}` : null
-          if (key && processedMarks.value.has(key)) break
-          if (key) processedMarks.value.add(key)
+          const aKey = m.actionId ? `MARK_INCORRECT:action:${m.actionId}` : null
+          const qKey = m.questionId ? `MARK_INCORRECT:question:${m.questionId}` : null
+          if ((aKey && processedMarks.value.has(aKey)) || (qKey && processedMarks.value.has(qKey))) break
+          if (aKey) processedMarks.value.add(aKey)
+          if (qKey) processedMarks.value.add(qKey)
 
           disableTeam(m.teamId)
           activeTeamId.value = null

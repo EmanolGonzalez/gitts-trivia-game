@@ -9,6 +9,35 @@
       </div>
       <div class="flex items-center gap-2">
         <button class="btn bg-green-600 text-white" @click="openCreate">Nuevo equipo</button>
+        <button class="btn bg-slate-800 text-white" @click="openTeamsImportModal">Importar / Exportar JSON</button>
+      </div>
+    </div>
+
+    <!-- Teams Import / Export Modal -->
+    <div v-if="showTeamsImportModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div class="w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-900 p-4">
+        <div class="flex items-center justify-between mb-3">
+          <div class="text-lg font-semibold">Importar / Exportar Equipos (formato)</div>
+          <div class="flex items-center gap-2">
+            <button class="rounded-lg px-3 py-1 text-sm hover:bg-slate-800" @click="downloadTeamsSample">Descargar ejemplo</button>
+            <button class="rounded-lg px-3 py-1 text-sm hover:bg-slate-800" @click="showTeamsImportModal = false">Cerrar</button>
+          </div>
+        </div>
+        <p class="text-sm text-slate-400 mb-3">Pega aquí JSON con la forma <code>{ teams: [ { id, name, score, color }, ... ] }</code></p>
+        <div class="mb-3 rounded-lg border border-slate-700 bg-slate-800 p-3 text-sm">
+          <div class="font-semibold mb-1">Prompt de ejemplo (útil para pedir a una IA que genere el JSON de equipos)</div>
+          <div class="whitespace-pre-wrap text-xs text-slate-200 mb-2">{{ promptExampleTeams }}</div>
+          <div class="flex gap-2">
+            <button class="rounded-lg px-3 py-1 text-sm hover:bg-slate-700" @click="copyTeamsPrompt">Copiar prompt</button>
+            <button class="rounded-lg px-3 py-1 text-sm hover:bg-slate-700" @click="downloadTeamsSample">Descargar ejemplo</button>
+          </div>
+        </div>
+        <textarea v-model="teamsImportText" rows="10" class="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white"></textarea>
+        <div v-if="teamsImportError" class="text-rose-400 text-sm mt-2">{{ teamsImportError }}</div>
+        <div class="mt-4 flex items-center justify-end gap-2">
+          <button class="rounded-xl px-4 py-2 text-sm hover:bg-slate-800" @click="showTeamsImportModal = false">Cancelar</button>
+          <button class="rounded-xl bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500" @click="importTeamsFromTextarea">Importar y guardar</button>
+        </div>
       </div>
     </div>
 
@@ -216,6 +245,80 @@ function syncTeamsAndPersist() {
       sampleRandomized: game.sampleRandomized,
     },
   })
+}
+
+/* -----------------------------
+   IMPORT / EXPORT TEAMS MODAL
+------------------------------ */
+const showTeamsImportModal = ref(false)
+const teamsImportText = ref('')
+const teamsImportError = ref<string | null>(null)
+
+function openTeamsImportModal() {
+  const sample = { teams: teamsLocal.value.map((t) => ({ id: t.id, name: t.name, score: t.score ?? 0, color: t.color })) }
+  teamsImportText.value = JSON.stringify(sample, null, 2)
+  teamsImportError.value = null
+  showTeamsImportModal.value = true
+}
+
+function importTeamsFromTextarea() {
+  teamsImportError.value = null
+  try {
+    const data = JSON.parse(teamsImportText.value)
+    if (!data || !Array.isArray(data.teams)) {
+      teamsImportError.value = 'Formato inválido: se espera { teams: [...] }'
+      return
+    }
+    teamsLocal.value = data.teams.map((t: any) => ({ id: t.id, name: t.name, score: Number(t.score ?? 0), color: t.color }))
+    syncTeamsAndPersist()
+    showTeamsImportModal.value = false
+    alert('Equipos importados y guardados en localStorage')
+  } catch (err: any) {
+    teamsImportError.value = 'JSON inválido: ' + (err?.message ?? 'error')
+  }
+}
+
+function downloadTeamsSample() {
+  const blob = new Blob([teamsImportText.value || '{}'], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'teams-sample.json'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+const promptExampleTeams = `Por favor entrega un JSON con la clave \"teams\" que contenga un array de objetos con la forma: { id: string, name: string, score: number, color: string }. Devuelve solo el JSON sin explicaciones.`
+
+function copyTeamsPrompt() {
+  copyToClipboard(promptExampleTeams).then((ok: boolean) => {
+    if (ok) alert('Prompt copiado al portapapeles')
+    else alert('No se pudo copiar el prompt')
+  })
+}
+
+// Helper: copiar al portapapeles con fallback (copiado desde Questions.vue)
+async function copyToClipboard(text: string) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch {}
+  // fallback
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.left = '-9999px'
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+    return true
+  } catch {
+    return false
+  }
 }
 </script>
 

@@ -486,6 +486,85 @@ function importJsonChange(e: Event) {
 }
 
 /* -----------------------------
+   IMPORT MODAL (textarea guided)
+------------------------------ */
+const showImportModal = ref(false)
+const importText = ref('')
+const importError = ref<string | null>(null)
+
+function openImportModal() {
+  const sample = {
+    categories: categories.value.map((c) => ({ id: c.id, name: c.name, icon: c.icon })),
+    questions: questions.value.map((q) => ({ id: q.id, categoryId: q.categoryId, text: q.text, answer: q.answer, points: q.points })),
+  }
+  importText.value = JSON.stringify(sample, null, 2)
+  importError.value = null
+  showImportModal.value = true
+}
+
+function downloadSample() {
+  const blob = new Blob([importText.value || '{}'], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'questions-sample.json'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function importFromTextarea() {
+  importError.value = null
+  try {
+    const data = JSON.parse(importText.value)
+    if (!data || !Array.isArray(data.categories) || !Array.isArray(data.questions)) {
+      importError.value = 'Formato inválido: se esperan "categories" y "questions" como arrays.'
+      return
+    }
+    categories.value = data.categories.map((c: any) => ({ id: c.id, name: c.name, icon: c.icon }))
+    questions.value = data.questions.map((q: any) => ({ id: q.id, categoryId: q.categoryId, text: q.text, answer: q.answer, points: q.points }))
+    // persist and sync to store
+    syncStoreAndPersist()
+    showImportModal.value = false
+    alert('Importación realizada y guardada en localStorage.')
+  } catch (err: any) {
+    importError.value = 'JSON inválido: ' + (err?.message ?? 'error de parseo')
+  }
+}
+
+// Helper: copiar al portapapeles con fallback
+async function copyToClipboard(text: string) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch {}
+  // fallback
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.left = '-9999px'
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+    return true
+  } catch {
+    return false
+  }
+}
+
+const promptExample = `Por favor entrega un JSON con las claves \"categories\" y \"questions\".\n- categories: array de objetos { id: string, name: string, icon: string }\n- questions: array de objetos { id: string, categoryId: string, text: string, answer: string, points: number }\nDevuelve solo el JSON sin explicaciones.`
+
+function copyPromptToClipboard() {
+  copyToClipboard(promptExample).then((ok) => {
+    if (ok) alert('Prompt copiado al portapapeles')
+    else alert('No se pudo copiar el prompt')
+  })
+}
+
+/* -----------------------------
    PUBLICAR AL JUEGO (Broadcast)
 ------------------------------ */
 function publishToGame() {
@@ -646,16 +725,10 @@ function reindexQuestionIds() {
 
         <div class="flex items-center gap-2">
           <button
-            @click="exportJson"
+            @click="openImportModal"
             class="btn btn-sm bg-slate-800 hover:bg-slate-700 text-white rounded-xl px-4 py-2"
           >
-            Exportar JSON
-          </button>
-          <button
-            @click="importJsonClick"
-            class="btn btn-sm bg-slate-100 hover:bg-slate-200 text-slate-900 rounded-xl px-4 py-2"
-          >
-            Importar JSON
+            Importar / Exportar JSON
           </button>
           <input
             ref="importInput"
@@ -1025,6 +1098,33 @@ function reindexQuestionIds() {
           >
             Guardar
           </button>
+        </div>
+      </div>
+    </div>
+    <!-- Import / Export Modal -->
+    <div v-if="showImportModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div class="w-full max-w-3xl rounded-2xl border border-slate-800 bg-slate-900 p-4">
+        <div class="flex items-center justify-between mb-3">
+          <div class="text-lg font-semibold">Importar / Exportar JSON (formato)</div>
+          <div class="flex items-center gap-2">
+            <button class="rounded-lg px-3 py-1 text-sm hover:bg-slate-800" @click="downloadSample">Descargar ejemplo</button>
+            <button class="rounded-lg px-3 py-1 text-sm hover:bg-slate-800" @click="showImportModal = false">Cerrar</button>
+          </div>
+        </div>
+        <p class="text-sm text-slate-400 mb-3">Pega aquí el JSON con las claves <code>categories</code> y <code>questions</code>. Cada categoría necesita <code>{ id, name, icon }</code> y cada pregunta <code>{ id, categoryId, text, answer, points }</code>.</p>
+        <div class="mb-3 rounded-lg border border-slate-700 bg-slate-800 p-3 text-sm">
+          <div class="font-semibold mb-1">Prompt de ejemplo (útil para pedir a una IA que genere el JSON)</div>
+          <div class="whitespace-pre-wrap text-xs text-slate-200 mb-2">{{ promptExample }}</div>
+          <div class="flex gap-2">
+            <button class="rounded-lg px-3 py-1 text-sm hover:bg-slate-700" @click="copyPromptToClipboard">Copiar prompt</button>
+            <button class="rounded-lg px-3 py-1 text-sm hover:bg-slate-700" @click="downloadSample">Descargar ejemplo</button>
+          </div>
+        </div>
+        <textarea v-model="importText" rows="12" class="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white"></textarea>
+        <div v-if="importError" class="text-rose-400 text-sm mt-2">{{ importError }}</div>
+        <div class="mt-4 flex items-center justify-end gap-2">
+          <button class="rounded-xl px-4 py-2 text-sm hover:bg-slate-800" @click="showImportModal = false">Cancelar</button>
+          <button class="rounded-xl bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500" @click="importFromTextarea">Importar y guardar</button>
         </div>
       </div>
     </div>
