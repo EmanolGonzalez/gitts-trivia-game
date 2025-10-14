@@ -2,10 +2,11 @@
   <div class="roulette-container">
     <Roulette
       ref="rouletteRef"
-      :items="wheelItems"
+      :items="paddedWheelItems"
       :duration="5"
       :first-item-index="firstItemIndex"
       :wheel-result-index="wheelResultIndex"
+      @wheel-start="onWheelStart"
       @wheel-end="onSpinEnd"
     />
     <button v-if="!autoSpin" @click="spinRoulette" class="spin-button">Girar Ruleta</button>
@@ -21,7 +22,10 @@ const props = defineProps<{
   startIndex?: number | null
 }>()
 
-const emit = defineEmits<{ (e: 'spin-end', category: { id: string; label: string }): void }>()
+const emit = defineEmits<{
+  (e: 'spin-end', category: { id: string; label: string }): void
+  (e: 'wheel-start'): void
+}>()
 
 const rouletteRef = ref<{ launchWheel?: () => void } | null>(null)
 
@@ -39,7 +43,7 @@ const categoriesLocal = computed(() =>
 // ✅ ESTRUCTURA CORRECTA: vue3-roulette requiere estos campos específicos
 const wheelItems = computed(() => 
   categoriesLocal.value.map((c, index) => ({
-    id: index + 1,  // vue3-roulette usa id numérico
+    id: index + 1,
     name: c.label,
     htmlContent: c.label,
     textColor: '#ffffff',
@@ -70,9 +74,9 @@ const paddedWheelItems = computed(() => {
 
 const autoSpin = props.autoSpin ?? false
 
-// ✅ Props deben ser OBJETOS con propiedad 'value'
+// ✅ IMPORTANTE: vue3-roulette NO acepta null, debe ser siempre un número
 const firstItemIndex = ref({ value: 0 })
-const wheelResultIndex = ref<{ value: number | null }>({ value: null })
+const wheelResultIndex = ref({ value: 0 })
 
 function spinRoulette() {
   try {
@@ -80,7 +84,10 @@ function spinRoulette() {
     if (N === 0) return
     const idx = Math.floor(Math.random() * N)
     wheelResultIndex.value = { value: idx }
-    rouletteRef.value?.launchWheel?.()
+    // Esperar un tick antes de lanzar para que Vue actualice la prop
+    setTimeout(() => {
+      rouletteRef.value?.launchWheel?.()
+    }, 50)
   } catch (err) {
     console.warn('No se pudo lanzar la ruleta:', err)
   }
@@ -93,8 +100,12 @@ function spinTo(index?: number | null) {
     const idx = typeof index === 'number' && index >= 0 && index < N 
       ? index 
       : Math.floor(Math.random() * N)
+    
     wheelResultIndex.value = { value: idx }
-    rouletteRef.value?.launchWheel?.()
+    // Esperar un tick antes de lanzar para que Vue actualice la prop
+    setTimeout(() => {
+      rouletteRef.value?.launchWheel?.()
+    }, 50)
   } catch (err) {
     console.warn('spinTo failed', err)
   }
@@ -102,12 +113,20 @@ function spinTo(index?: number | null) {
 
 defineExpose({ spinTo })
 
+function onWheelStart() {
+  emit('wheel-start')
+}
+
 function onSpinEnd(item: any) {
   if (!item) return
   
-  // Encontrar la categoría original usando el name
+  // Encontrar la categoría original usando el name (ignorar items de padding)
   const originalCategory = categoriesLocal.value.find(c => c.label === item.name)
-  if (!originalCategory) return
+  if (!originalCategory) {
+    // Si cayó en un item de padding, girar de nuevo
+    spinRoulette()
+    return
+  }
   
   const cat = { id: originalCategory.id, label: originalCategory.label }
   emit('spin-end', cat)
@@ -122,7 +141,7 @@ onMounted(() => {
       } else {
         spinRoulette()
       }
-    }, 120)
+    }, 200)
   }
 })
 </script>
