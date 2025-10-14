@@ -236,6 +236,12 @@ export type StateSnapshotMessage = {
  *  Unión de mensajes salientes
  *  ----------------------------- */
 
+export type ShowRouletteMessage = { type: 'SHOW_ROULETTE'; categories: Category[]; targetIndex?: number }
+export type HideRouletteMessage = { type: 'HIDE_ROULETTE' }
+export type RouletteResultMessage = { type: 'ROULETTE_RESULT'; category: Category }
+export type RouletteAnimDoneMessage = { type: 'ROULETTE_ANIM_DONE' }
+
+
 export type OutgoingMessage =
   | LoadDataMessage
   | StartGameMessage
@@ -264,6 +270,10 @@ export type OutgoingMessage =
   | HelloMessage
   | StateSnapshotMessage
   | AckSnapshotMessage
+  | ShowRouletteMessage
+  | HideRouletteMessage
+  | RouletteResultMessage
+  | RouletteAnimDoneMessage
 
 /** -----------------------------
  *  Helpers

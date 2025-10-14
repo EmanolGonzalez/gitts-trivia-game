@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, computed, ref } from 'vue'
+/* eslint-disable vue/multi-word-component-names */
+import { onMounted, onUnmounted, computed, ref, watch } from 'vue'
 import { useGameStore } from '@/stores/game'
-import CategoryRoulette from '@/components/CategoryRoulette.vue'
 
 const game = useGameStore()
 
@@ -92,10 +92,31 @@ function start() {
 }
 
 function next() {
+  // If roulette not shown, request displays to show it and animate toward the next question's category
   if (!showRoulette.value) {
+    // determine next question in the deck (without advancing it)
+    let targetCategoryIndex: number | undefined = undefined
+    if (game.questionDeck.length > 0) {
+      const nextIdx = Math.min(game.deckIndex + 1, game.questionDeck.length - 1)
+      const nextQId = game.questionDeck[nextIdx]
+      const nextQ = game.questions.find((qq) => qq.id === nextQId)
+      if (nextQ) {
+        // find index of this category in the categories list
+        const catIdx = game.categories.findIndex((c) => c.id === nextQ.categoryId)
+        if (catIdx >= 0) targetCategoryIndex = catIdx
+      }
+    }
+
+    try {
+      game.sendMessage({ type: 'SHOW_ROULETTE', categories: game.categories, targetIndex: targetCategoryIndex })
+    } catch (err) {
+      console.warn('Failed to send SHOW_ROULETTE:', err)
+    }
     showRoulette.value = true
     return
   }
+
+  // If roulette already visible, just advance normally (fallback)
   game.nextQuestion()
   showRoulette.value = false
 }
@@ -178,22 +199,24 @@ const buzzerProgress = computed(() => {
 
 const showRoulette = ref(false)
 
-function nextQuestionByCategory(category: { id: string; label: string }) {
-  console.log('Avanzando a la siguiente pregunta en la categoría:', category);
-  // Aquí puedes implementar la lógica para seleccionar la siguiente pregunta basada en la categoría
-  const nextQuestion = game.questions.find((q: { categoryId: string }) => q.categoryId === category.id);
-  if (nextQuestion) {
-    game.setCurrentQuestion(nextQuestion);
-  } else {
-    console.warn('No se encontró una pregunta para la categoría seleccionada:', category);
+// Broadcast to displays when the controller shows/hides the roulette
+watch(showRoulette, (v) => {
+  if (!v) {
+    try {
+      game.sendMessage({ type: 'HIDE_ROULETTE' })
+    } catch (err) {
+      console.warn('Failed to send HIDE_ROULETTE:', err)
+    }
   }
-}
+})
 
-function onCategorySelected(category: { id: string; label: string }) {
-  console.log('Categoría seleccionada:', category);
-  nextQuestionByCategory(category);
-  showRoulette.value = false;
-}
+// When the store's current question changes (result from roulette arrived), hide the roulette
+watch(
+  () => game.currentQuestionId,
+  () => {
+    if (showRoulette.value) showRoulette.value = false
+  },
+)
 </script>
 
 <template>
@@ -641,7 +664,6 @@ function onCategorySelected(category: { id: string; label: string }) {
       </div>
     </div>
 
-    <!-- Componente de ruleta de categorías -->
-    <CategoryRoulette v-if="showRoulette" @spin-end="onCategorySelected" />
+  <!-- The roulette overlay is handled on Displays via SHOW_ROULETTE messages -->
   </div>
 </template>

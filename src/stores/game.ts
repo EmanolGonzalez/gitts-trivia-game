@@ -11,16 +11,26 @@ import type {
   OutgoingMessage as GameMessage,
   DisplayMode,
   StateSnapshotMessage,
+  LoadDataMessage,
+  SelectQuestionMessage,
+  StartTimerMessage,
+  UpdateTimerMessage,
+  StartBuzzerTimerMessage,
+  UpdateBuzzerTimerMessage,
+  TeamBuzzedMessage,
+  MarkCorrectMessage,
+  MarkIncorrectMessage,
+  RouletteResultMessage,
+  SetActiveTeamMessage,
+  DisableTeamForQuestionMessage,
+  SetDisplayModeMessage,
 } from '@/types/game'
-import { fetchUsedQuestions, saveUsedQuestions } from '@/utils/questionTracker'
-
-// Claves para LocalStorage
+import { saveUsedQuestions } from '@/utils/questionTracker'
 const LS_CATEGORIES = 'trivia.categories'
 const LS_QUESTIONS = 'trivia.questions'
 const LS_SETTINGS = 'trivia.settings'
 
 type Role = 'control' | 'display'
-
 function toPlain<T>(x: T): T {
   // rompe proxies/reactive, funciones, símbolos, etc.
   return JSON.parse(JSON.stringify(x))
@@ -109,7 +119,16 @@ export const useGameStore = defineStore('game', () => {
     t.enabled = enabled
     // persist teams/settings so participation survives reload
     try {
-      saveToLocalStorage({ teams: toPlain(teams.value), settings: undefined } as any)
+      const gd = {
+        teams: toPlain(teams.value),
+        settings: {
+          defaultTimeLimit: defaultTimeLimit.value,
+          buzzerTimeLimit: buzzerTimeLimit.value,
+          sampleSize: sampleSize.value,
+          sampleRandomized: sampleRandomized.value,
+        },
+      }
+      saveToLocalStorage(gd as GameData)
     } catch {}
     sendStateSnapshot()
   }
@@ -204,23 +223,7 @@ export const useGameStore = defineStore('game', () => {
         incorrectAudio.value.src = iPath
       }
 
-      // Attach end handlers to restore ambient volume
-      try {
-        if (correctAudio.value) {
-          correctAudio.value.onended = () => {
-            try {
-              fadeAmbient(1, 200)
-            } catch {}
-          }
-        }
-        if (incorrectAudio.value) {
-          incorrectAudio.value.onended = () => {
-            try {
-              fadeAmbient(1, 200)
-            } catch {}
-          }
-        }
-      } catch {}
+
 
       // Try to start ambient (may be blocked by browser until user gesture)
       ambientAudio.value.play().catch(() => {
@@ -264,6 +267,7 @@ export const useGameStore = defineStore('game', () => {
     } catch {}
   }
 
+  /* eslint-disable @typescript-eslint/no-unused-vars */
   function stopAmbient() {
     try {
       if (ambientAudio.value) {
@@ -274,6 +278,7 @@ export const useGameStore = defineStore('game', () => {
       }
     } catch {}
   }
+  /* eslint-enable @typescript-eslint/no-unused-vars */
 
   function stopAllAudio() {
     try {
@@ -301,9 +306,6 @@ export const useGameStore = defineStore('game', () => {
   function playCorrect() {
     try {
       // lower ambient volume smoothly, play effect and restore on end
-      try {
-        fadeAmbient(0.15, 120)
-      } catch {}
       if (!correctAudio.value) initAudio()
       if (correctAudio.value) {
         correctAudio.value.currentTime = 0
@@ -315,9 +317,6 @@ export const useGameStore = defineStore('game', () => {
   function playIncorrect() {
     try {
       // lower ambient volume smoothly, play effect and restore on end
-      try {
-        fadeAmbient(0.15, 120)
-      } catch {}
       if (!incorrectAudio.value) initAudio()
       if (incorrectAudio.value) {
         incorrectAudio.value.currentTime = 0
@@ -511,22 +510,25 @@ export const useGameStore = defineStore('game', () => {
    *  AUTO-LOAD DE DATOS
    * --------------------- */
   async function ensureDataLoaded() {
-    const usedQuestions = await fetchUsedQuestions()
-    const [qres, gres] = await Promise.all([
-      fetch('/data/questions.json'),
-      fetch('/data/game-state.json'),
-    ])
-    const questionsData = (await qres.json()) as QuestionsData
-    const gameData = (await gres.json()) as GameData
+    try {
+      const localData = loadFromLocalStorage()
+      if (localData) {
+        applyLoadedData(localData.game, localData.questions)
+        sendMessage({ type: 'LOAD_DATA', game: localData.game, questions: localData.questions })
+        sendStateSnapshot()
+        return
+      }
 
-    // Exclude used questions
-    questionsData.questions = questionsData.questions.filter(
-      (q) => !usedQuestions.includes(q.id),
-    )
-
-    applyLoadedData(gameData, questionsData)
-    sendMessage({ type: 'LOAD_DATA', game: gameData, questions: questionsData })
-    sendStateSnapshot()
+      console.warn('No data found in localStorage. Initializing empty state.')
+      applyLoadedData(
+        { teams: [], settings: { defaultTimeLimit: 30, buzzerTimeLimit: 10, sampleSize: 10, sampleRandomized: true } },
+        { categories: [], questions: [] },
+      )
+      sendMessage({ type: 'LOAD_DATA', game: { teams: [], settings: { defaultTimeLimit: 30, buzzerTimeLimit: 10, sampleSize: 10, sampleRandomized: true } }, questions: { categories: [], questions: [] } })
+      sendStateSnapshot()
+    } catch (error) {
+      console.error('Error ensuring data loaded:', error)
+    }
   }
 
   function finalizeGame() {
@@ -534,19 +536,7 @@ export const useGameStore = defineStore('game', () => {
     saveUsedQuestions(usedQuestions)
     resetGame()
   }
-
-  function loadSettingsFromLocalStorage(): {
-    teams?: Team[]
-    settings?: GameData['settings']
-  } | null {
-    try {
-      const s = JSON.parse(localStorage.getItem(LS_SETTINGS) || 'null')
-      if (!s) return null
-      return { teams: Array.isArray(s.teams) ? s.teams : undefined, settings: s }
-    } catch {
-      return null
-    }
-  }
+  // (kept for reference) loadSettingsFromLocalStorage removed because not used.
 
   function loadFromLocalStorage(): { game: GameData; questions: QuestionsData } | null {
     try {
@@ -621,18 +611,6 @@ export const useGameStore = defineStore('game', () => {
     saveToLocalStorage(undefined, { categories: [], questions: [] })
   }
 
-  async function loadFromPublicData() {
-    const [qres, gres] = await Promise.all([
-      fetch('/data/questions.json'),
-      fetch('/data/game-state.json'),
-    ])
-    const questionsData = (await qres.json()) as QuestionsData
-    const gameData = (await gres.json()) as GameData
-    applyLoadedData(gameData, questionsData)
-    sendMessage({ type: 'LOAD_DATA', game: gameData, questions: questionsData })
-    sendStateSnapshot()
-  }
-
   function applyLoadedData(game: GameData, qd: QuestionsData) {
     teams.value = (game.teams ?? []).map((t) => ({ ...t, score: t.score ?? 0 }))
     categories.value = qd.categories ?? []
@@ -677,7 +655,6 @@ export const useGameStore = defineStore('game', () => {
     // Initialize audio on user gesture (Start game) so browsers allow playback
     try {
       initAudio()
-      playAmbient()
     } catch {}
     buildQuestionDeck()
     status.value = 'question'
@@ -740,10 +717,7 @@ export const useGameStore = defineStore('game', () => {
     }
     selectQuestion(nextId)
     sendMessage({ type: 'NEXT_QUESTION' })
-    // resume ambient music on control when advancing
-    try {
-      playAmbient()
-    } catch {}
+
   }
 
   function teamBuzzed(teamId: string) {
@@ -857,11 +831,17 @@ export const useGameStore = defineStore('game', () => {
   function sendMessage(msg: GameMessage) {
     if (!channel.value) return
     try {
+      if (msg.type === 'SHOW_ROULETTE' || msg.type === 'ROULETTE_RESULT' || msg.type === 'HIDE_ROULETTE') {
+        console.debug('[BC] sendMessage', msg)
+      }
       channel.value.postMessage(toPlain(msg))
     } catch (err) {
       console.error('BroadcastChannel postMessage failed', err)
     }
   }
+
+  // NOTE: UX messages (SHOW_ROULETTE / HIDE_ROULETTE / ROULETTE_RESULT)
+  // are part of the typed GameMessage union and are handled below.
 
   function sendStateSnapshot() {
     if (role.value !== 'control') return
@@ -919,6 +899,9 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function handleIncomingMessage(msg: GameMessage) {
+    if (msg.type === 'SHOW_ROULETTE' || msg.type === 'ROULETTE_RESULT' || msg.type === 'HIDE_ROULETTE') {
+      console.debug('[BC] handleIncomingMessage', msg)
+    }
     switch (msg.type) {
       case 'HELLO':
         if (role.value === 'control') sendStateSnapshot()
@@ -972,19 +955,23 @@ export const useGameStore = defineStore('game', () => {
         }
         break
 
-      case 'LOAD_DATA':
-        applyLoadedData((msg as any).game as GameData, (msg as any).questions as QuestionsData)
+      case 'LOAD_DATA': {
+        const m = msg as LoadDataMessage
+        applyLoadedData(m.game, m.questions)
         break
+      }
 
       case 'START_GAME':
         status.value = 'question'
         break
 
-      case 'SELECT_QUESTION':
-        currentQuestionId.value = (msg as any).questionId
+      case 'SELECT_QUESTION': {
+        const m = msg as SelectQuestionMessage
+        currentQuestionId.value = m.questionId
         resetQuestionState()
         status.value = 'question'
         break
+      }
 
       case 'SHOW_ANSWER':
         status.value = 'review'
@@ -996,10 +983,7 @@ export const useGameStore = defineStore('game', () => {
         break
 
       case 'NEXT_QUESTION':
-        // resume ambient music on displays when advancing
-        try {
-          playAmbient()
-        } catch {}
+
         break
 
       case 'RESET_QUESTION_STATE':
@@ -1010,11 +994,31 @@ export const useGameStore = defineStore('game', () => {
         resetGame()
         break
 
+      case 'ROULETTE_RESULT': {
+        // When the control receives a roulette result (sent by a display or the control itself)
+        // pick a question matching the category and select it. Make selection idempotent.
+        if (role.value === 'control') {
+          const m = msg as RouletteResultMessage
+          const catId = m.category?.id
+          if (catId) {
+            // prefer a question in that category that isn't already selected
+            const next = questions.value.find((q) => q.categoryId === catId && q.id !== currentQuestionId.value)
+            if (next) {
+              // guard: if we're already selecting this question, ignore
+              if (currentQuestionId.value === next.id) return
+              selectQuestion(next.id)
+            }
+          }
+        }
+        break
+      }
+
       // Timers general
-      case 'START_TIMER':
+      case 'START_TIMER': {
+        const m = msg as StartTimerMessage
         isTimerActive.value = true
-        generalStartedAt.value = (msg as any).startedAt
-        generalDeadline.value = (msg as any).deadline
+        generalStartedAt.value = m.startedAt
+        generalDeadline.value = m.deadline
         generalRemainingSnapshot.value = null
         timeRemaining.value = calcRemaining(generalDeadline.value)
         // If we're a display, start a local interval to update the general timer
@@ -1039,10 +1043,13 @@ export const useGameStore = defineStore('game', () => {
             }, 300)
           }
         } catch {}
+      }
+      break
+      case 'UPDATE_TIMER': {
+        const m = msg as UpdateTimerMessage
+        timeRemaining.value = m.timeRemaining
         break
-      case 'UPDATE_TIMER':
-        timeRemaining.value = (msg as any).timeRemaining
-        break
+      }
       case 'TIME_EXPIRED':
         // clear display interval if any
         if (timerInterval.value) {
@@ -1104,10 +1111,11 @@ export const useGameStore = defineStore('game', () => {
         break
 
       // Timers buzzer
-      case 'START_BUZZER_TIMER':
+      case 'START_BUZZER_TIMER': {
+        const m = msg as StartBuzzerTimerMessage
         isBuzzerTimerActive.value = true
-        buzzerStartedAt.value = (msg as any).startedAt
-        buzzerDeadline.value = (msg as any).deadline
+        buzzerStartedAt.value = m.startedAt
+        buzzerDeadline.value = m.deadline
         buzzerTimeRemaining.value = calcRemaining(buzzerDeadline.value)
         // If we're a display, start a local interval to update the buzzer countdown
         try {
@@ -1131,10 +1139,13 @@ export const useGameStore = defineStore('game', () => {
             }, 300)
           }
         } catch {}
+      }
+      break
+      case 'UPDATE_BUZZER_TIMER': {
+        const m = msg as UpdateBuzzerTimerMessage
+        buzzerTimeRemaining.value = m.timeRemaining
         break
-      case 'UPDATE_BUZZER_TIMER':
-        buzzerTimeRemaining.value = (msg as any).timeRemaining
-        break
+      }
       case 'BUZZER_TIME_EXPIRED':
         // clear any local interval
         if (buzzerTimerInterval.value) {
@@ -1158,19 +1169,19 @@ export const useGameStore = defineStore('game', () => {
         buzzerStartedAt.value = null
         break
 
-      case 'TEAM_BUZZED':
-        if (
-          !hasAnyTeamBuzzed.value &&
-          !disabledTeamsForQuestion.value.includes((msg as any).teamId)
-        ) {
+      case 'TEAM_BUZZED': {
+        const m = msg as TeamBuzzedMessage
+        if (!hasAnyTeamBuzzed.value && !disabledTeamsForQuestion.value.includes(m.teamId)) {
           hasAnyTeamBuzzed.value = true
-          activeTeamId.value = (msg as any).teamId
+          activeTeamId.value = m.teamId
         }
         break
+      }
 
       case 'MARK_CORRECT': {
-        const team = teams.value.find((t) => t.id === (msg as any).teamId)
-        if (team) team.score += (msg as any).points
+        const m = msg as MarkCorrectMessage
+        const team = teams.value.find((t) => t.id === m.teamId)
+        if (team) team.score += m.points
         status.value = 'review'
         resetTimers()
         // display plays correct sound when receiving mark
@@ -1180,8 +1191,9 @@ export const useGameStore = defineStore('game', () => {
         break
       }
 
-      case 'MARK_INCORRECT':
-        disableTeam((msg as any).teamId)
+      case 'MARK_INCORRECT': {
+        const m = msg as MarkIncorrectMessage
+        disableTeam(m.teamId)
         activeTeamId.value = null
         hasAnyTeamBuzzed.value = false
         // display plays incorrect sound when receiving mark_incorrect
@@ -1189,22 +1201,29 @@ export const useGameStore = defineStore('game', () => {
           playIncorrect()
         } catch {}
         break
+      }
 
-      case 'SET_ACTIVE_TEAM':
-        activeTeamId.value = (msg as any).teamId
+      case 'SET_ACTIVE_TEAM': {
+        const m = msg as SetActiveTeamMessage
+        activeTeamId.value = m.teamId
         break
+      }
 
-      case 'DISABLE_TEAM_FOR_QUESTION':
-        disableTeam((msg as any).teamId)
+      case 'DISABLE_TEAM_FOR_QUESTION': {
+        const m = msg as DisableTeamForQuestionMessage
+        disableTeam(m.teamId)
         break
+      }
 
       case 'ENABLE_ALL_TEAMS_FOR_QUESTION':
         enableAllTeamsForQuestion()
         break
 
-      case 'SET_DISPLAY_MODE':
-        displayMode.value = (msg as any).mode
+      case 'SET_DISPLAY_MODE': {
+        const m = msg as SetDisplayModeMessage
+        displayMode.value = m.mode
         break
+      }
 
       case 'ACK_SNAPSHOT':
         break
@@ -1243,6 +1262,9 @@ export const useGameStore = defineStore('game', () => {
     currentQuestion,
     activeTeam,
     availableTeams,
+  // deck info (read-only exposure for UI control)
+  questionDeck,
+  deckIndex,
 
     // control principal
     startGame,
@@ -1266,7 +1288,6 @@ export const useGameStore = defineStore('game', () => {
 
     // data
     ensureDataLoaded,
-    loadFromPublicData,
     saveToLocalStorage,
     saveQuestionsToLocalStorage,
     saveSettingsToLocalStorage,
@@ -1280,7 +1301,6 @@ export const useGameStore = defineStore('game', () => {
     sendMessage,
     // audio
     initAudio,
-    finalizeGame,
-    nextQuestionByCategory,
+    finalizeGame
   }
 })

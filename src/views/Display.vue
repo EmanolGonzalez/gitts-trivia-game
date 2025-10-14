@@ -1,6 +1,15 @@
 <script setup lang="ts">
+/* eslint-disable vue/multi-word-component-names */
 import { onMounted, onBeforeUnmount, computed, ref } from 'vue'
 import { useGameStore } from '@/stores/game'
+import CategoryRoulette from '@/components/CategoryRoulette.vue'
+import type {
+  MarkCorrectMessage,
+  MarkIncorrectMessage,
+  ShowRouletteMessage,
+  RouletteResultMessage,
+  DisplayMode,
+} from '@/types/game'
 
 type DecisionKind = 'correct' | 'incorrect' | null
 
@@ -17,7 +26,7 @@ const activeTeam = computed(() => game.activeTeam)
 const timeMain = computed(() => game.timeRemaining)
 const timeBuzzer = computed(() => game.buzzerTimeRemaining)
 const isPaused = computed(() => !game.isTimerActive && game.timeRemaining > 0)
-const isQuestion = computed(() => game.displayMode === 'question')
+// const isQuestion = computed(() => game.displayMode === 'question')
 
 // Progreso (aprox) para barras
 const generalProgress = computed(() => {
@@ -62,15 +71,60 @@ let uxChannel: BroadcastChannel | null = null
 function initUXChannel() {
   uxChannel = new BroadcastChannel('trivia')
   uxChannel.onmessage = (ev: MessageEvent) => {
-    const msg = ev.data as { type?: string; teamId?: string; points?: number }
-    if (!msg?.type) return
-    if (msg.type === 'MARK_CORRECT') {
-      const pts = typeof msg.points === 'number' ? msg.points : (q.value?.points ?? null)
-      showDecision('correct', msg.teamId ?? null, pts)
+    const raw = ev.data as Record<string, unknown>
+    const t = typeof raw?.type === 'string' ? raw.type : undefined
+    if (!t) return
+    if (t === 'MARK_CORRECT') {
+      const m = raw as unknown as MarkCorrectMessage
+      const pts = typeof m.points === 'number' ? m.points : q.value?.points ?? null
+      showDecision('correct', m.teamId ?? null, pts)
+      return
     }
-    if (msg.type === 'MARK_INCORRECT') {
-      showDecision('incorrect', msg.teamId ?? null, null)
+    if (t === 'MARK_INCORRECT') {
+      const m = raw as unknown as MarkIncorrectMessage
+      showDecision('incorrect', m.teamId ?? null, null)
+      return
     }
+    if (t === 'SHOW_ROULETTE') {
+      const m = raw as unknown as ShowRouletteMessage
+      console.debug('[Display UX] SHOW_ROULETTE received', m)
+      // Map Category.name -> label expected by the CategoryRoulette component
+      rouletteCategories.value = Array.isArray(m.categories)
+        ? m.categories.map((c) => ({ id: c.id, label: c.name }))
+        : []
+      // if sender provided a targetIndex, pass it to the roulette overlay so it animates to that slot
+      rouletteStartIndex.value = typeof m.targetIndex === 'number' ? m.targetIndex : null
+      rouletteSelected.value = null
+      showRouletteDisplay.value = true
+      return
+    }
+    if (t === 'HIDE_ROULETTE') {
+      // no payload
+      showRouletteDisplay.value = false
+      rouletteCategories.value = []
+      return
+    }
+    if (t === 'ROULETTE_RESULT') {
+      const m = raw as unknown as RouletteResultMessage
+      console.debug('[Display UX] ROULETTE_RESULT received', m)
+      // Convert incoming Category (with name) to the small {id,label} shape used by the UX overlay
+      rouletteSelected.value = m.category ? { id: m.category.id, label: m.category.name } : null
+      setTimeout(() => {
+        showRouletteDisplay.value = false
+      }, 800)
+      return
+    }
+  }
+}
+
+function onDisplayRouletteSelected(cat: { id: string; label: string }) {
+  // when display spins (UX), notify control/other clients about the result as typed message
+  try {
+    const payload = { type: 'ROULETTE_RESULT', category: { id: cat.id, name: cat.label } }
+    // send via broadcast channel so control can react (and other displays can hide the overlay)
+    uxChannel?.postMessage(payload)
+  } catch (err) {
+    console.warn('Failed to post roulette result from display UX', err)
   }
 }
 
@@ -88,12 +142,18 @@ onBeforeUnmount(() => {
   }
 })
 
+// UX-only roulette display state (does not mutate game store)
+const showRouletteDisplay = ref(false)
+const rouletteCategories = ref<{ id: string; label: string }[]>([])
+const rouletteSelected = ref<{ id: string; label: string } | null>(null)
+const rouletteStartIndex = ref<number | null>(null)
+
 // ----------- Helpers visuales -----------
-const displayIs = (m: string) => game.displayMode === (m as any)
+const displayIs = (m: DisplayMode) => game.displayMode === m
 
 // para el header de categoría (opcional si tienes icon en Category)
 const categoryIconPath = computed(() => {
-  switch ((category.value as any)?.icon) {
+  switch (category.value?.icon) {
     case 'Sparkles':
       return 'M12 2l2.39 4.84L20 8l-4 3.9L17 18l-5-2.6L7 18l1-6.1L4 8l5.61-1.16L12 2z'
     case 'Atom':
@@ -135,7 +195,7 @@ function scaleClass(team: { id?: string } | undefined) {
 </script>
 
 <template>
-  <div class="min-h-dvh w-full relative overflow-hidden">
+  <div class="min-h-dvh w-full relative overflow-hidden bg-slate-900">
     <!-- HEADER -->
     <header
       class="relative z-10 container mx-auto px-4 pt-6 pb-3 flex items-center justify-between"
@@ -402,6 +462,16 @@ function scaleClass(team: { id?: string } | undefined) {
         <p>Esperando instrucciones del controlador…</p>
       </section>
     </main>
+
+    <!-- Roulette overlay on displays (UX-only) -->
+    <div v-if="showRouletteDisplay" class="absolute inset-0 z-30 grid place-items-center bg-black/60">
+      <CategoryRoulette
+        :categories="rouletteCategories"
+        :autoSpin="true"
+        :startIndex="rouletteStartIndex"
+        @spin-end="onDisplayRouletteSelected"
+      />
+    </div>
 
     <!-- OVERLAY: Correcto / Incorrecto -->
     <transition name="fade">

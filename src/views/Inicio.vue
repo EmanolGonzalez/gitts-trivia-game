@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/* eslint-disable vue/multi-word-component-names */
 import BannerEvents from '@/components/banner-events.vue'
 
 import { useRouter } from 'vue-router'
