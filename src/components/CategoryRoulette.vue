@@ -29,18 +29,13 @@ const emit = defineEmits<{
 
 const rouletteRef = ref<{ launchWheel?: () => void } | null>(null)
 
-const defaultCategories = [
-  { id: 'history', label: 'Historia', color: '#ef4444' },
-  { id: 'science', label: 'Ciencia', color: '#3b82f6' },
-  { id: 'sports', label: 'Deportes', color: '#f59e0b' },
-  { id: 'art', label: 'Arte', color: '#22c55e' },
-]
+const categoriesLocal = computed(() => {
+  if (props.categories && props.categories.length >= 1) {
+    return props.categories
+  }
+  return [{ id: 'placeholder', label: 'Sin Categorías', color: '#6b7280' }]
+})
 
-const categoriesLocal = computed(() =>
-  props.categories && props.categories.length >= 1 ? props.categories : defaultCategories,
-)
-
-// ✅ ESTRUCTURA CORRECTA: vue3-roulette requiere estos campos específicos
 const wheelItems = computed(() => 
   categoriesLocal.value.map((c, index) => ({
     id: index + 1,
@@ -51,40 +46,40 @@ const wheelItems = computed(() =>
   }))
 )
 
-// ✅ PADDING: Si hay menos de 4 items, rellenar con items dummy para cumplir el validador
+// ✅ SOLUCIÓN: Duplicar categorías hasta tener 4 espacios
 const paddedWheelItems = computed(() => {
   const items = wheelItems.value
-  if (items.length >= 4) return items
+  const realCount = items.length
   
-  const padding = []
-  const colors = ['#ef4444', '#3b82f6', '#f59e0b', '#22c55e', '#8b5cf6', '#ec4899']
+  if (realCount >= 4) return items
   
-  for (let i = items.length; i < 4; i++) {
-    padding.push({
-      id: i + 1,
-      name: '—',
-      htmlContent: '—',
-      textColor: '#ffffff',
-      background: colors[i % colors.length]
+  // Duplicar las categorías existentes hasta llenar 4 espacios
+  const result = [...items]
+  let copyIndex = 0
+  
+  while (result.length < 4) {
+    const original = items[copyIndex % items.length]
+    result.push({
+      ...original,
+      id: result.length + 1  // ID único para cada espacio
     })
+    copyIndex++
   }
   
-  return [...items, ...padding]
+  return result
 })
 
 const autoSpin = props.autoSpin ?? false
 
-// ✅ IMPORTANTE: vue3-roulette NO acepta null, debe ser siempre un número
 const firstItemIndex = ref({ value: 0 })
 const wheelResultIndex = ref({ value: 0 })
 
 function spinRoulette() {
   try {
-    const N = wheelItems.value.length
+    const N = paddedWheelItems.value.length
     if (N === 0) return
     const idx = Math.floor(Math.random() * N)
     wheelResultIndex.value = { value: idx }
-    // Esperar un tick antes de lanzar para que Vue actualice la prop
     setTimeout(() => {
       rouletteRef.value?.launchWheel?.()
     }, 50)
@@ -97,12 +92,31 @@ function spinTo(index?: number | null) {
   try {
     const N = wheelItems.value.length
     if (N === 0) return
-    const idx = typeof index === 'number' && index >= 0 && index < N 
-      ? index 
-      : Math.floor(Math.random() * N)
     
-    wheelResultIndex.value = { value: idx }
-    // Esperar un tick antes de lanzar para que Vue actualice la prop
+    // Calcular el índice en la ruleta expandida
+    let targetIndex = 0
+    if (typeof index === 'number' && index >= 0 && index < N) {
+      targetIndex = index
+    } else {
+      targetIndex = Math.floor(Math.random() * N)
+    }
+    
+    // Si la ruleta está duplicada, mapear al índice correcto
+    const paddedN = paddedWheelItems.value.length
+    if (paddedN > N) {
+      // Buscar una de las apariciones de la categoría objetivo
+      const targetName = wheelItems.value[targetIndex]?.name
+      const allIndices = paddedWheelItems.value
+        .map((item, i) => item.name === targetName ? i : -1)
+        .filter(i => i !== -1)
+      
+      // Elegir aleatoriamente entre las apariciones
+      if (allIndices.length > 0) {
+        targetIndex = allIndices[Math.floor(Math.random() * allIndices.length)]
+      }
+    }
+    
+    wheelResultIndex.value = { value: targetIndex }
     setTimeout(() => {
       rouletteRef.value?.launchWheel?.()
     }, 50)
@@ -120,10 +134,9 @@ function onWheelStart() {
 function onSpinEnd(item: any) {
   if (!item) return
   
-  // Encontrar la categoría original usando el name (ignorar items de padding)
+  // Encontrar la categoría original (ignorar duplicados)
   const originalCategory = categoriesLocal.value.find(c => c.label === item.name)
   if (!originalCategory) {
-    // Si cayó en un item de padding, girar de nuevo
     spinRoulette()
     return
   }
@@ -132,7 +145,6 @@ function onSpinEnd(item: any) {
   emit('spin-end', cat)
 }
 
-// ✅ Lógica de auto-spin mejorada
 onMounted(() => {
   if (autoSpin) {
     setTimeout(() => {
@@ -152,20 +164,28 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  padding: 2rem;
 }
 
 .spin-button {
-  margin-top: 20px;
-  padding: 10px 20px;
-  background-color: #4caf50;
+  margin-top: 2rem;
+  padding: 0.75rem 2rem;
+  background-color: #3b82f6;
   color: white;
   border: none;
-  border-radius: 5px;
+  border-radius: 0.5rem;
+  font-size: 1.125rem;
+  font-weight: 600;
   cursor: pointer;
-  font-size: 16px;
+  transition: all 0.2s;
 }
 
 .spin-button:hover {
-  background-color: #45a049;
+  background-color: #2563eb;
+  transform: scale(1.05);
+}
+
+.spin-button:active {
+  transform: scale(0.95);
 }
 </style>
