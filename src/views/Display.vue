@@ -76,7 +76,7 @@ function initUXChannel() {
     if (!t) return
     if (t === 'MARK_CORRECT') {
       const m = raw as unknown as MarkCorrectMessage
-      const pts = typeof m.points === 'number' ? m.points : q.value?.points ?? null
+      const pts = typeof m.points === 'number' ? m.points : (q.value?.points ?? null)
       showDecision('correct', m.teamId ?? null, pts)
       return
     }
@@ -109,9 +109,12 @@ function initUXChannel() {
       console.debug('[Display UX] ROULETTE_RESULT received', m)
       // Convert incoming Category (with name) to the small {id,label} shape used by the UX overlay
       rouletteSelected.value = m.category ? { id: m.category.id, label: m.category.name } : null
+
+      // 🔧 CAMBIO: Aumentar de 800ms a 3500ms para poder apreciar el resultado
       setTimeout(() => {
         showRouletteDisplay.value = false
-      }, 800)
+      }, 3500) // ✅ Cambiado de 800 a 3500 (3.5 segundos)
+
       return
     }
   }
@@ -464,7 +467,10 @@ function scaleClass(team: { id?: string } | undefined) {
     </main>
 
     <!-- Roulette overlay on displays (UX-only) -->
-    <div v-if="showRouletteDisplay" class="absolute inset-0 z-30 grid place-items-center bg-black/60">
+    <div
+      v-if="showRouletteDisplay"
+      class="absolute inset-0 z-30 grid place-items-center bg-black/60"
+    >
       <CategoryRoulette
         :categories="rouletteCategories"
         :autoSpin="true"
