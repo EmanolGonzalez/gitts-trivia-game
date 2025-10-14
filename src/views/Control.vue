@@ -92,23 +92,26 @@ function start() {
 }
 
 function next() {
-  // If roulette not shown, request displays to show it and animate toward the next question's category
+  // Si showRoulette no está visible, mostrarlo primero
   if (!showRoulette.value) {
-    // determine next question in the deck (without advancing it)
+    // Determinar la categoría de la siguiente pregunta
     let targetCategoryIndex: number | undefined = undefined
     if (game.questionDeck.length > 0) {
       const nextIdx = Math.min(game.deckIndex + 1, game.questionDeck.length - 1)
       const nextQId = game.questionDeck[nextIdx]
       const nextQ = game.questions.find((qq) => qq.id === nextQId)
       if (nextQ) {
-        // find index of this category in the categories list
         const catIdx = game.categories.findIndex((c) => c.id === nextQ.categoryId)
         if (catIdx >= 0) targetCategoryIndex = catIdx
       }
     }
 
     try {
-      game.sendMessage({ type: 'SHOW_ROULETTE', categories: game.categories, targetIndex: targetCategoryIndex })
+      game.sendMessage({ 
+        type: 'SHOW_ROULETTE', 
+        categories: game.categories, 
+        targetIndex: targetCategoryIndex 
+      })
     } catch (err) {
       console.warn('Failed to send SHOW_ROULETTE:', err)
     }
@@ -116,13 +119,15 @@ function next() {
     return
   }
 
-  // If roulette already visible, just advance normally (fallback)
+  // Si la ruleta ya está visible, avanzar
   game.nextQuestion()
   showRoulette.value = false
 }
 
 function showAnswer() {
   game.showAnswer()
+  // Resetear showRoulette cuando mostramos la respuesta
+  showRoulette.value = false
 }
 
 function buzz(teamId: string) {
@@ -134,13 +139,24 @@ function correct(teamId?: string) {
   const id = teamId ?? game.activeTeamId ?? ''
   if (!id) return
   game.markCorrect(id)
+  // Resetear showRoulette después de calificar
+  showRoulette.value = false
 }
 
 function incorrect(teamId?: string) {
   const id = teamId ?? game.activeTeamId ?? ''
   if (!id) return
   game.markIncorrect(id)
+  // Resetear showRoulette después de calificar
+  showRoulette.value = false
 }
+
+// Agregar un watch para resetear showRoulette cuando el estado cambia
+watch(() => game.status, (newStatus) => {
+  if (newStatus === 'review' || newStatus === 'question') {
+    showRoulette.value = false
+  }
+})
 
 function resetGame() {
   if (confirm('¿Reiniciar la partida y puntajes a 0?')) {

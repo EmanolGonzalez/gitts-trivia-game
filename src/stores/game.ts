@@ -223,8 +223,6 @@ export const useGameStore = defineStore('game', () => {
         incorrectAudio.value.src = iPath
       }
 
-
-
       // Try to start ambient (may be blocked by browser until user gesture)
       ambientAudio.value.play().catch(() => {
         // ignore autoplay rejection; will resume on user gesture or when nextQuestion() is called
@@ -233,8 +231,6 @@ export const useGameStore = defineStore('game', () => {
       console.warn('initAudio failed', err)
     }
   }
-
-
 
   /* eslint-enable @typescript-eslint/no-unused-vars */
 
@@ -477,10 +473,30 @@ export const useGameStore = defineStore('game', () => {
 
       console.warn('No data found in localStorage. Initializing empty state.')
       applyLoadedData(
-        { teams: [], settings: { defaultTimeLimit: 30, buzzerTimeLimit: 10, sampleSize: 10, sampleRandomized: true } },
+        {
+          teams: [],
+          settings: {
+            defaultTimeLimit: 30,
+            buzzerTimeLimit: 10,
+            sampleSize: 10,
+            sampleRandomized: true,
+          },
+        },
         { categories: [], questions: [] },
       )
-      sendMessage({ type: 'LOAD_DATA', game: { teams: [], settings: { defaultTimeLimit: 30, buzzerTimeLimit: 10, sampleSize: 10, sampleRandomized: true } }, questions: { categories: [], questions: [] } })
+      sendMessage({
+        type: 'LOAD_DATA',
+        game: {
+          teams: [],
+          settings: {
+            defaultTimeLimit: 30,
+            buzzerTimeLimit: 10,
+            sampleSize: 10,
+            sampleRandomized: true,
+          },
+        },
+        questions: { categories: [], questions: [] },
+      })
       sendStateSnapshot()
     } catch (error) {
       console.error('Error ensuring data loaded:', error)
@@ -673,7 +689,6 @@ export const useGameStore = defineStore('game', () => {
     }
     selectQuestion(nextId)
     sendMessage({ type: 'NEXT_QUESTION' })
-
   }
 
   function teamBuzzed(teamId: string) {
@@ -691,17 +706,41 @@ export const useGameStore = defineStore('game', () => {
     const team = teams.value.find((t) => t.id === teamId)
     const pts = points ?? currentQuestion.value?.points ?? 0
     if (team) team.score += pts
-    // update timers/state and notify displays
+
+    // Cancelar cualquier auto-next pendiente
+    if (autoNextTimeout) {
+      clearTimeout(autoNextTimeout)
+      autoNextTimeout = null
+    }
+
+    // Detener todos los timers y resetear estado de buzz
+    stopGeneralTimer()
+    stopBuzzerTimer()
+    activeTeamId.value = null
+    hasAnyTeamBuzzed.value = false
+
+    // Cambiar a modo review
+    status.value = 'review'
+    displayMode.value = 'answer'
+
+    // Notificar a displays
     sendMessage({ type: 'MARK_CORRECT', teamId, points: pts })
-    // show the correct answer on displays immediately
-    showAnswer()
-    // play correct sound on control
+    sendStateSnapshot()
+
+    // Reproducir sonido
     try {
       playCorrect()
     } catch {}
   }
 
+  // Reemplaza la función markIncorrect existente con esta:
   function markIncorrect(teamId: string) {
+    // Cancelar cualquier auto-next pendiente
+    if (autoNextTimeout) {
+      clearTimeout(autoNextTimeout)
+      autoNextTimeout = null
+    }
+
     disableTeam(teamId)
     stopBuzzerTimer()
     activeTeamId.value = null
@@ -710,15 +749,16 @@ export const useGameStore = defineStore('game', () => {
     // Si no quedan equipos disponibles -> cerrar la ronda
     if (availableTeams.value.length === 0) {
       stopGeneralTimer(false)
+      status.value = 'review'
+      displayMode.value = 'answer'
       sendMessage({ type: 'TIME_EXPIRED', version: bump() })
-      onTimeExpired()
+      // NO llamar a onTimeExpired aquí, dejar que el usuario avance manualmente
       sendMessage({ type: 'MARK_INCORRECT', teamId })
       sendStateSnapshot()
       return
     }
 
-    // Reanudar desde snapshot
-    // play incorrect sound on control
+    // Reanudar desde snapshot si quedan equipos
     try {
       playIncorrect()
     } catch {}
@@ -787,7 +827,11 @@ export const useGameStore = defineStore('game', () => {
   function sendMessage(msg: GameMessage) {
     if (!channel.value) return
     try {
-      if (msg.type === 'SHOW_ROULETTE' || msg.type === 'ROULETTE_RESULT' || msg.type === 'HIDE_ROULETTE') {
+      if (
+        msg.type === 'SHOW_ROULETTE' ||
+        msg.type === 'ROULETTE_RESULT' ||
+        msg.type === 'HIDE_ROULETTE'
+      ) {
         console.debug('[BC] sendMessage', msg)
       }
       channel.value.postMessage(toPlain(msg))
@@ -855,7 +899,11 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function handleIncomingMessage(msg: GameMessage) {
-    if (msg.type === 'SHOW_ROULETTE' || msg.type === 'ROULETTE_RESULT' || msg.type === 'HIDE_ROULETTE') {
+    if (
+      msg.type === 'SHOW_ROULETTE' ||
+      msg.type === 'ROULETTE_RESULT' ||
+      msg.type === 'HIDE_ROULETTE'
+    ) {
       console.debug('[BC] handleIncomingMessage', msg)
     }
     switch (msg.type) {
@@ -939,7 +987,6 @@ export const useGameStore = defineStore('game', () => {
         break
 
       case 'NEXT_QUESTION':
-
         break
 
       case 'RESET_QUESTION_STATE':
@@ -958,7 +1005,9 @@ export const useGameStore = defineStore('game', () => {
           const catId = m.category?.id
           if (catId) {
             // prefer a question in that category that isn't already selected
-            const next = questions.value.find((q) => q.categoryId === catId && q.id !== currentQuestionId.value)
+            const next = questions.value.find(
+              (q) => q.categoryId === catId && q.id !== currentQuestionId.value,
+            )
             if (next) {
               // guard: if we're already selecting this question, ignore
               if (currentQuestionId.value === next.id) return
@@ -970,37 +1019,38 @@ export const useGameStore = defineStore('game', () => {
       }
 
       // Timers general
-      case 'START_TIMER': {
-        const m = msg as StartTimerMessage
-        isTimerActive.value = true
-        generalStartedAt.value = m.startedAt
-        generalDeadline.value = m.deadline
-        generalRemainingSnapshot.value = null
-        timeRemaining.value = calcRemaining(generalDeadline.value)
-        // If we're a display, start a local interval to update the general timer
-        try {
-          if (role.value === 'display') {
-            if (timerInterval.value) {
-              clearInterval(timerInterval.value)
-              timerInterval.value = null
-            }
-            timerInterval.value = window.setInterval(() => {
-              try {
-                const remaining = calcRemaining(generalDeadline.value)
-                timeRemaining.value = remaining
-                if (remaining <= 0) {
-                  if (timerInterval.value) {
-                    clearInterval(timerInterval.value)
-                    timerInterval.value = null
+      case 'START_TIMER':
+        {
+          const m = msg as StartTimerMessage
+          isTimerActive.value = true
+          generalStartedAt.value = m.startedAt
+          generalDeadline.value = m.deadline
+          generalRemainingSnapshot.value = null
+          timeRemaining.value = calcRemaining(generalDeadline.value)
+          // If we're a display, start a local interval to update the general timer
+          try {
+            if (role.value === 'display') {
+              if (timerInterval.value) {
+                clearInterval(timerInterval.value)
+                timerInterval.value = null
+              }
+              timerInterval.value = window.setInterval(() => {
+                try {
+                  const remaining = calcRemaining(generalDeadline.value)
+                  timeRemaining.value = remaining
+                  if (remaining <= 0) {
+                    if (timerInterval.value) {
+                      clearInterval(timerInterval.value)
+                      timerInterval.value = null
+                    }
+                    timeRemaining.value = 0
                   }
-                  timeRemaining.value = 0
-                }
-              } catch {}
-            }, 300)
-          }
-        } catch {}
-      }
-      break
+                } catch {}
+              }, 300)
+            }
+          } catch {}
+        }
+        break
       case 'UPDATE_TIMER': {
         const m = msg as UpdateTimerMessage
         timeRemaining.value = m.timeRemaining
@@ -1067,36 +1117,37 @@ export const useGameStore = defineStore('game', () => {
         break
 
       // Timers buzzer
-      case 'START_BUZZER_TIMER': {
-        const m = msg as StartBuzzerTimerMessage
-        isBuzzerTimerActive.value = true
-        buzzerStartedAt.value = m.startedAt
-        buzzerDeadline.value = m.deadline
-        buzzerTimeRemaining.value = calcRemaining(buzzerDeadline.value)
-        // If we're a display, start a local interval to update the buzzer countdown
-        try {
-          if (role.value === 'display') {
-            if (buzzerTimerInterval.value) {
-              clearInterval(buzzerTimerInterval.value)
-              buzzerTimerInterval.value = null
-            }
-            buzzerTimerInterval.value = window.setInterval(() => {
-              try {
-                const remaining = calcRemaining(buzzerDeadline.value)
-                buzzerTimeRemaining.value = remaining
-                if (remaining <= 0) {
-                  if (buzzerTimerInterval.value) {
-                    clearInterval(buzzerTimerInterval.value)
-                    buzzerTimerInterval.value = null
+      case 'START_BUZZER_TIMER':
+        {
+          const m = msg as StartBuzzerTimerMessage
+          isBuzzerTimerActive.value = true
+          buzzerStartedAt.value = m.startedAt
+          buzzerDeadline.value = m.deadline
+          buzzerTimeRemaining.value = calcRemaining(buzzerDeadline.value)
+          // If we're a display, start a local interval to update the buzzer countdown
+          try {
+            if (role.value === 'display') {
+              if (buzzerTimerInterval.value) {
+                clearInterval(buzzerTimerInterval.value)
+                buzzerTimerInterval.value = null
+              }
+              buzzerTimerInterval.value = window.setInterval(() => {
+                try {
+                  const remaining = calcRemaining(buzzerDeadline.value)
+                  buzzerTimeRemaining.value = remaining
+                  if (remaining <= 0) {
+                    if (buzzerTimerInterval.value) {
+                      clearInterval(buzzerTimerInterval.value)
+                      buzzerTimerInterval.value = null
+                    }
+                    buzzerTimeRemaining.value = 0
                   }
-                  buzzerTimeRemaining.value = 0
-                }
-              } catch {}
-            }, 300)
-          }
-        } catch {}
-      }
-      break
+                } catch {}
+              }, 300)
+            }
+          } catch {}
+        }
+        break
       case 'UPDATE_BUZZER_TIMER': {
         const m = msg as UpdateBuzzerTimerMessage
         buzzerTimeRemaining.value = m.timeRemaining
@@ -1218,9 +1269,9 @@ export const useGameStore = defineStore('game', () => {
     currentQuestion,
     activeTeam,
     availableTeams,
-  // deck info (read-only exposure for UI control)
-  questionDeck,
-  deckIndex,
+    // deck info (read-only exposure for UI control)
+    questionDeck,
+    deckIndex,
 
     // control principal
     startGame,
@@ -1257,6 +1308,6 @@ export const useGameStore = defineStore('game', () => {
     sendMessage,
     // audio
     initAudio,
-    finalizeGame
+    finalizeGame,
   }
 })
