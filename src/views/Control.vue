@@ -63,7 +63,11 @@ function saveParticipants() {
 }
 
 function clearHistory() {
-  if (confirm('¿Limpiar el historial de preguntas usadas? Esto permitirá usar todas las preguntas nuevamente.')) {
+  if (
+    confirm(
+      '¿Limpiar el historial de preguntas usadas? Esto permitirá usar todas las preguntas nuevamente.',
+    )
+  ) {
     game.clearUsedQuestions()
     alert('✅ Historial limpiado. Las preguntas estarán disponibles en la próxima partida.')
   }
@@ -129,10 +133,10 @@ function next() {
     }
 
     try {
-      game.sendMessage({ 
-        type: 'SHOW_ROULETTE', 
-        categories: game.categories, 
-        targetIndex: targetCategoryIndex 
+      game.sendMessage({
+        type: 'SHOW_ROULETTE',
+        categories: game.categories,
+        targetIndex: targetCategoryIndex,
       })
     } catch (err) {
       console.warn('Failed to send SHOW_ROULETTE:', err)
@@ -174,11 +178,14 @@ function incorrect(teamId?: string) {
 }
 
 // Agregar un watch para resetear showRoulette cuando el estado cambia
-watch(() => game.status, (newStatus) => {
-  if (newStatus === 'review' || newStatus === 'question') {
-    showRoulette.value = false
-  }
-})
+watch(
+  () => game.status,
+  (newStatus) => {
+    if (newStatus === 'review' || newStatus === 'question') {
+      showRoulette.value = false
+    }
+  },
+)
 
 function resetGame() {
   if (confirm('¿Reiniciar la partida y puntajes a 0?')) {
@@ -277,43 +284,43 @@ watch(
           </div>
         </div>
 
-      <div class="flex items-center gap-2">
-        <!-- Botones existentes -->
-        <button
-          class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm"
-          @click="toMode('question')"
-        >
-          Pregunta
-        </button>
-        <button
-          class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm"
-          @click="toMode('answer')"
-        >
-          Respuesta
-        </button>
-        <button
-          class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm"
-          @click="toMode('scoreboard')"
-        >
-          Puntuaciones
-        </button>
-        
-        <!-- NUEVO: Botón limpiar historial -->
-        <button
-          class="px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 border border-amber-500 text-sm"
-          @click="clearHistory"
-          title="Limpiar historial de preguntas usadas"
-        >
-          🗑️ Limpiar Historial
-        </button>
-        
-        <button
-          class="px-3 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 border border-rose-500 text-sm"
-          @click="resetGame"
-        >
-          Reiniciar
-        </button>
-      </div>
+        <div class="flex items-center gap-2">
+          <!-- Botones existentes -->
+          <button
+            class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm"
+            @click="toMode('question')"
+          >
+            Pregunta
+          </button>
+          <button
+            class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm"
+            @click="toMode('answer')"
+          >
+            Respuesta
+          </button>
+          <button
+            class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm"
+            @click="toMode('scoreboard')"
+          >
+            Puntuaciones
+          </button>
+
+          <!-- NUEVO: Botón limpiar historial -->
+          <button
+            class="px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 border border-amber-500 text-sm"
+            @click="clearHistory"
+            title="Limpiar historial de preguntas usadas"
+          >
+            🗑️ Limpiar Historial
+          </button>
+
+          <button
+            class="px-3 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 border border-rose-500 text-sm"
+            @click="resetGame"
+          >
+            Reiniciar
+          </button>
+        </div>
       </div>
     </header>
 
@@ -393,34 +400,11 @@ watch(
                   >
                 </div>
 
-                <!-- Barra de progreso general -->
-                <div class="mt-3">
-                  <div class="h-2 rounded bg-slate-800 overflow-hidden">
-                    <div
-                      class="h-2 bg-sky-500 transition-[width] duration-200"
-                      :style="{ width: generalProgress + '%' }"
-                      role="progressbar"
-                      aria-label="Tiempo de pregunta"
-                      :aria-valuenow="generalProgress"
-                      aria-valuemin="0"
-                      aria-valuemax="100"
-                    />
-                  </div>
-                  <div class="mt-1 text-[11px] text-slate-400">
-                    {{ generalProgress }}%
-                    <span v-if="q.timeLimit"> · tl={{ q.timeLimit }}s</span>
-                  </div>
-                </div>
-
-                <div
-                  v-if="isReview"
-                  class="mt-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30"
-                >
+                <div class="mt-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
                   <div class="text-xs uppercase tracking-wide text-emerald-300 mb-1">Respuesta</div>
                   <div class="text-emerald-100">{{ q.answer }}</div>
                 </div>
               </div>
-              <div v-else class="text-slate-400 text-sm">No hay pregunta seleccionada.</div>
 
               <!-- Advertencia sin equipos disponibles -->
               <div
@@ -652,12 +636,17 @@ watch(
                 v-for="(dq, i) in deckQuestions"
                 :key="dq.id"
                 class="text-xs p-2 rounded flex items-start gap-2"
-                :class="{ 'bg-slate-800': i === game.deckIndex, 'bg-transparent': i !== game.deckIndex }"
+                :class="{
+                  'bg-slate-800': i === game.deckIndex,
+                  'bg-transparent': i !== game.deckIndex,
+                }"
               >
                 <div class="w-6 text-slate-400">{{ i + 1 }}</div>
-                <div class="truncate text-slate-200">{{ dq.text || ('#' + dq.id) }}</div>
+                <div class="truncate text-slate-200">{{ dq.text || '#' + dq.id }}</div>
               </div>
-              <div v-if="deckQuestions.length === 0" class="text-xs text-slate-400">(muestra vacía)</div>
+              <div v-if="deckQuestions.length === 0" class="text-xs text-slate-400">
+                (muestra vacía)
+              </div>
             </div>
           </div>
           <div class="px-4 pb-4 text-[11px] text-slate-400">
@@ -715,7 +704,5 @@ watch(
         </div>
       </div>
     </div>
-
-
   </div>
 </template>
